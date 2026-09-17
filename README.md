@@ -12,9 +12,9 @@ DeepCrackのデータ準備とPyTorch Datasetを実装し、MobileNetV3-Small + 
 
 1. E000: DeepCrack 2画像による学習パイプラインのoverfit test（完了）
 2. E001: DeepCrack + MobileNetV3-Small/Lite U-Net baseline（学習基盤完成）
-3. E002: DINOv3 teacherからのsoft-logit distillation
-4. E003: DINOv3 feature distillation
-5. E004: SAM 3による少数ラベル・擬似ラベル実験
+3. E002: 共通teacher cache + soft-logit distillation（配線基盤）
+4. E003: SAM系による少数ラベル・擬似ラベル実験
+5. E004: DINOv3 feature distillation
 
 ## 開発環境
 
@@ -63,6 +63,8 @@ DeepCrackの取得・変換手順は [docs/deepcrack-setup.md](docs/deepcrack-se
 Baselineのsmoke testとColab学習は [docs/training.md](docs/training.md) にあります。
 
 RTX搭載の業務PCで画像準備から学習・評価まで行う手順は [docs/business-pc-workflow.md](docs/business-pc-workflow.md) にあります。
+
+Teacher cacheとlogit distillationの考え方・E002の実行方法は [docs/distillation.md](docs/distillation.md) にあります。
 
 ## GitHubとVS Code
 

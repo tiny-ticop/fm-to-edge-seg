@@ -31,6 +31,47 @@ class BinarySegmentationLoss(nn.Module):
         return {"total": total, "bce": bce, "dice": dice}
 
 
+class BinaryLogitDistillationLoss(nn.Module):
+    """Bernoulli KL divergence between teacher and student predictions."""
+
+    def __init__(self, temperature: float = 2.0, confidence_threshold: float = 0.0) -> None:
+        super().__init__()
+        if temperature <= 0:
+            raise ValueError("temperature must be positive")
+        if not 0.0 <= confidence_threshold <= 1.0:
+            raise ValueError("confidence_threshold must be in [0, 1]")
+        self.temperature = temperature
+        self.confidence_threshold = confidence_threshold
+
+    def forward(
+        self,
+        student_logits: torch.Tensor,
+        teacher_logits: torch.Tensor,
+        valid_mask: torch.Tensor,
+        confidence: torch.Tensor,
+    ) -> torch.Tensor:
+        _validate_shapes(student_logits, teacher_logits, valid_mask)
+        if confidence.shape != student_logits.shape:
+            raise ValueError(
+                f"confidence and logits must match: {confidence.shape} != {student_logits.shape}"
+            )
+        selected = valid_mask.bool() & (confidence >= self.confidence_threshold)
+        selected_float = selected.float()
+        selected_count = selected_float.sum()
+        if selected_count == 0:
+            return student_logits.sum() * 0.0
+
+        student_scaled = student_logits / self.temperature
+        teacher_scaled = teacher_logits / self.temperature
+        teacher_probability = torch.sigmoid(teacher_scaled)
+        kl_map = teacher_probability * (
+            F.logsigmoid(teacher_scaled) - F.logsigmoid(student_scaled)
+        ) + (1.0 - teacher_probability) * (
+            F.logsigmoid(-teacher_scaled) - F.logsigmoid(-student_scaled)
+        )
+        return (kl_map * selected_float).sum() / selected_count * self.temperature**2
+
+
 def masked_dice_loss(
     logits: torch.Tensor,
     targets: torch.Tensor,

@@ -1,0 +1,7 @@
+name: reference_mask_logits
+enabled: true
+teacher: reference_ground_truth_mask
+cache_root: teacher_cache/reference_mask_logits
+temperature: 2.0
+weight: 0.5
+confidence_threshold: 0.0

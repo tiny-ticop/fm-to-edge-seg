@@ -14,21 +14,35 @@ class BinarySegmentationAugmentation:
     brightness: float = 0.1
     contrast: float = 0.1
 
-    def __call__(self, image: Image.Image, mask: Image.Image) -> tuple[Image.Image, Image.Image]:
+    def __call__(
+        self,
+        image: Image.Image,
+        mask: Image.Image,
+        dense_targets: list[Image.Image] | None = None,
+    ) -> tuple[Image.Image, Image.Image] | tuple[Image.Image, Image.Image, list[Image.Image]]:
+        targets = dense_targets or []
         if random.random() < self.horizontal_flip_probability:
             image = ImageOps.mirror(image)
             mask = ImageOps.mirror(mask)
+            targets = [ImageOps.mirror(target) for target in targets]
         if random.random() < self.vertical_flip_probability:
             image = ImageOps.flip(image)
             mask = ImageOps.flip(mask)
+            targets = [ImageOps.flip(target) for target in targets]
         if random.random() < self.rotate_90_probability:
             rotations = random.randint(1, 3)
             image = image.rotate(90 * rotations, expand=True)
             mask = mask.rotate(90 * rotations, resample=Image.Resampling.NEAREST, expand=True)
+            targets = [
+                target.rotate(90 * rotations, resample=Image.Resampling.BILINEAR, expand=True)
+                for target in targets
+            ]
         if self.brightness > 0:
             factor = 1.0 + random.uniform(-self.brightness, self.brightness)
             image = ImageEnhance.Brightness(image).enhance(factor)
         if self.contrast > 0:
             factor = 1.0 + random.uniform(-self.contrast, self.contrast)
             image = ImageEnhance.Contrast(image).enhance(factor)
-        return image, mask
+        if dense_targets is None:
+            return image, mask
+        return image, mask, targets

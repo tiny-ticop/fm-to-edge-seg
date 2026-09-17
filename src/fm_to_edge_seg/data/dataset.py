@@ -11,6 +11,7 @@ from PIL import Image
 from torch.utils.data import Dataset
 
 from fm_to_edge_seg.data.manifest import ManifestRecord, load_manifest
+from fm_to_edge_seg.distillation.cache import TeacherCache
 
 JointTransform = Callable[[Image.Image, Image.Image], tuple[Image.Image, Image.Image]]
 
@@ -35,6 +36,7 @@ class BinarySegmentationDataset(Dataset[dict[str, Any]]):
         joint_transform: JointTransform | None = None,
         image_mean: tuple[float, float, float] = (0.485, 0.456, 0.406),
         image_std: tuple[float, float, float] = (0.229, 0.224, 0.225),
+        teacher_cache: TeacherCache | None = None,
     ) -> None:
         self.records = [
             record
@@ -49,6 +51,9 @@ class BinarySegmentationDataset(Dataset[dict[str, Any]]):
         self.joint_transform = joint_transform
         self.mean = torch.tensor(image_mean, dtype=torch.float32).view(3, 1, 1)
         self.std = torch.tensor(image_std, dtype=torch.float32).view(3, 1, 1)
+        self.teacher_cache = teacher_cache
+        if teacher_cache is not None:
+            teacher_cache.validate_sample_ids([record.sample_id for record in self.records])
 
     def __len__(self) -> int:
         return len(self.records)
@@ -60,16 +65,34 @@ class BinarySegmentationDataset(Dataset[dict[str, Any]]):
         with Image.open(record.mask_path) as source_mask:
             mask = source_mask.convert("L")
 
-        if self.joint_transform is not None:
-            image, mask = self.joint_transform(image, mask)
+        dense_targets: list[Image.Image] | None = None
+        if self.teacher_cache is not None:
+            teacher = self.teacher_cache.load(record.sample_id)
+            if teacher.logits.shape != (image.height, image.width):
+                raise ValueError(
+                    f"Teacher/image size mismatch for '{record.sample_id}': "
+                    f"teacher={teacher.logits.shape[::-1]}, image={image.size}"
+                )
+            teacher_probability = 1.0 / (1.0 + np.exp(-teacher.logits))
+            dense_targets = [
+                Image.fromarray(teacher_probability.astype(np.float32), mode="F"),
+                Image.fromarray(teacher.confidence.astype(np.float32), mode="F"),
+            ]
 
+        if self.joint_transform is not None:
+            if dense_targets is None:
+                image, mask = self.joint_transform(image, mask)
+            else:
+                image, mask, dense_targets = self.joint_transform(image, mask, dense_targets)
+
+        original_size = image.size
         image, mask, letterbox = letterbox_pair(image, mask, self.input_size)
         image_tensor = _image_to_tensor(image)
         mask_array = np.asarray(mask, dtype=np.uint8)
         valid_array = mask_array != 255
         foreground_array = (mask_array == 1) & valid_array
 
-        return {
+        sample = {
             "image": (image_tensor - self.mean) / self.std,
             "mask": torch.from_numpy(foreground_array.copy()).unsqueeze(0).float(),
             "valid_mask": torch.from_numpy(valid_array.copy()).unsqueeze(0),
@@ -79,6 +102,19 @@ class BinarySegmentationDataset(Dataset[dict[str, Any]]):
             "metadata": record.metadata,
             "letterbox": letterbox,
         }
+        if dense_targets is not None:
+            probability_image = _letterbox_dense_target(
+                dense_targets[0], original_size, letterbox, fill=0.5
+            )
+            confidence_image = _letterbox_dense_target(
+                dense_targets[1], original_size, letterbox, fill=0.0
+            )
+            probability = np.clip(np.asarray(probability_image), 1e-6, 1 - 1e-6)
+            teacher_logit = np.log(probability / (1.0 - probability)).astype(np.float32)
+            teacher_confidence = np.asarray(confidence_image, dtype=np.float32).copy()
+            sample["teacher_logit"] = torch.from_numpy(teacher_logit).unsqueeze(0)
+            sample["teacher_confidence"] = torch.from_numpy(teacher_confidence).unsqueeze(0)
+        return sample
 
 
 def letterbox_pair(
@@ -121,6 +157,22 @@ def _image_to_tensor(image: Image.Image) -> torch.Tensor:
     return torch.from_numpy(array.transpose(2, 0, 1).copy())
 
 
+def _letterbox_dense_target(
+    target: Image.Image,
+    expected_size: tuple[int, int],
+    letterbox: LetterboxInfo,
+    fill: float,
+) -> Image.Image:
+    if target.size != expected_size:
+        raise ValueError(f"Dense target size mismatch: {target.size} != {expected_size}")
+    resized = target.resize(letterbox.resized_size, Image.Resampling.BILINEAR)
+    width = letterbox.resized_size[0] + letterbox.padding[0] + letterbox.padding[2]
+    height = letterbox.resized_size[1] + letterbox.padding[1] + letterbox.padding[3]
+    output = Image.new("F", (width, height), color=fill)
+    output.paste(resized, (letterbox.padding[0], letterbox.padding[1]))
+    return output
+
+
 def records_for_split(
     manifest_path: Path,
     split: str,
@@ -135,7 +187,7 @@ def records_for_split(
 
 def segmentation_collate(samples: list[dict[str, Any]]) -> dict[str, Any]:
     """Stack tensors while preserving per-sample metadata as Python objects."""
-    return {
+    batch = {
         "image": torch.stack([sample["image"] for sample in samples]),
         "mask": torch.stack([sample["mask"] for sample in samples]),
         "valid_mask": torch.stack([sample["valid_mask"] for sample in samples]),
@@ -145,3 +197,11 @@ def segmentation_collate(samples: list[dict[str, Any]]) -> dict[str, Any]:
         "metadata": [sample["metadata"] for sample in samples],
         "letterbox": [sample["letterbox"] for sample in samples],
     }
+    if "teacher_logit" in samples[0]:
+        if not all("teacher_logit" in sample for sample in samples):
+            raise ValueError("Teacher tensors must be present for every sample in a batch")
+        batch["teacher_logit"] = torch.stack([sample["teacher_logit"] for sample in samples])
+        batch["teacher_confidence"] = torch.stack(
+            [sample["teacher_confidence"] for sample in samples]
+        )
+    return batch

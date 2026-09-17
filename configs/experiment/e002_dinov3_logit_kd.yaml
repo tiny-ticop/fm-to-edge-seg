@@ -1,8 +1,0 @@
-experiment_id: e002_dinov3_logit_kd
-seed: 42
-data: configs/data/deepcrack.yaml
-model: configs/model/mobilenetv3_lite_unet.yaml
-loss: configs/loss/bce_dice.yaml
-distillation: configs/distillation/dinov3_logit.yaml
-output_dir: artifacts/e002_dinov3_logit_kd
-

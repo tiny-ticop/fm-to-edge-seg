@@ -7,10 +7,12 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
+from fm_to_edge_seg.distillation import create_reference_teacher_cache
 from fm_to_edge_seg.evaluation.evaluator import evaluate_checkpoint
 from fm_to_edge_seg.training.config import (
     AugmentationConfig,
     DataConfig,
+    DistillationConfig,
     ExperimentConfig,
     LossConfig,
     ModelConfig,
@@ -23,6 +25,7 @@ def test_training_smoke_creates_reproducibility_artifacts() -> None:
     with tempfile.TemporaryDirectory() as directory:
         root = Path(directory)
         manifest = _write_dataset(root)
+        teacher_cache = create_reference_teacher_cache(manifest, root / "teacher_cache")
         output = root / "artifacts"
         config = ExperimentConfig(
             experiment_id="test_smoke",
@@ -50,6 +53,13 @@ def test_training_smoke_creates_reproducibility_artifacts() -> None:
                 device="cpu",
             ),
             source_path=root / "experiment.yaml",
+            distillation=DistillationConfig(
+                teacher="reference_ground_truth_mask",
+                cache_root=teacher_cache,
+                temperature=2.0,
+                weight=0.5,
+                confidence_threshold=0.0,
+            ),
         )
 
         result = train_experiment(config)

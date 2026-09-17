@@ -103,6 +103,15 @@ def build_parser() -> argparse.ArgumentParser:
     evaluate_parser.add_argument("--split", default="test")
     evaluate_parser.add_argument("--device", default="auto")
     evaluate_parser.add_argument("--num-workers", type=int, default=0)
+    cache_parser = subparsers.add_parser(
+        "create-reference-teacher-cache",
+        help="Create a label-derived teacher cache to verify the distillation pipeline.",
+    )
+    cache_parser.add_argument("manifest", type=Path)
+    cache_parser.add_argument("output", type=Path)
+    cache_parser.add_argument("--split", default="train")
+    cache_parser.add_argument("--foreground-probability", type=float, default=0.99)
+    cache_parser.add_argument("--overwrite", action="store_true")
     return parser
 
 
@@ -239,5 +248,18 @@ def main(argv: list[str] | None = None) -> int:
             f"milliseconds_per_image={result.milliseconds_per_image:.2f}"
         )
         print(f"artifacts: {args.output.resolve()}")
+        return 0
+    if args.command == "create-reference-teacher-cache":
+        from fm_to_edge_seg.distillation import create_reference_teacher_cache
+
+        output = create_reference_teacher_cache(
+            manifest_path=args.manifest,
+            output_root=args.output,
+            split=args.split,
+            foreground_probability=args.foreground_probability,
+            overwrite=args.overwrite,
+        )
+        print(f"teacher_cache: {output}")
+        print("teacher_kind: reference_ground_truth_mask (pipeline verification only)")
         return 0
     raise ValueError(f"Unsupported command: {args.command}")

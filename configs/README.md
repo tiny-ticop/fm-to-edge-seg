@@ -13,3 +13,4 @@ configs/
 
 `local_*.yaml`と`company_*.yaml`はGitに含まれません。公開可能なtemplateから各環境で作成します。
 
+`distillation`設定は教師モデルそのものではなく、事前生成したteacher cacheを参照します。詳細は [Teacher cacheとlogit distillation](../docs/distillation.md) を参照してください。

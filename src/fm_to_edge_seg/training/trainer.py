@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import platform
@@ -17,8 +18,9 @@ from torch.utils.data import DataLoader
 
 from fm_to_edge_seg.data.dataset import BinarySegmentationDataset, segmentation_collate
 from fm_to_edge_seg.data.transforms import BinarySegmentationAugmentation
+from fm_to_edge_seg.distillation import TeacherCache
 from fm_to_edge_seg.evaluation import save_prediction_preview
-from fm_to_edge_seg.losses import BinarySegmentationLoss
+from fm_to_edge_seg.losses import BinaryLogitDistillationLoss, BinarySegmentationLoss
 from fm_to_edge_seg.metrics import BinaryMetricsAccumulator
 from fm_to_edge_seg.models import MobileNetV3LiteUNet
 from fm_to_edge_seg.training.config import ExperimentConfig
@@ -29,6 +31,7 @@ class EpochResult:
     loss: float
     bce: float
     dice_loss: float
+    distillation_loss: float
     iou: float
     dice: float
     precision: float
@@ -83,6 +86,11 @@ def train_experiment(
         split="train",
         input_size=config.data.input_size,
         joint_transform=train_transform,
+        teacher_cache=(
+            TeacherCache(config.distillation.cache_root)
+            if config.distillation is not None
+            else None
+        ),
     )
     validation_dataset = BinarySegmentationDataset(
         config.data.manifest,
@@ -111,6 +119,12 @@ def train_experiment(
         bce_weight=config.loss.bce_weight,
         dice_weight=config.loss.dice_weight,
     )
+    distillation_loss_function = None
+    if config.distillation is not None:
+        distillation_loss_function = BinaryLogitDistillationLoss(
+            temperature=config.distillation.temperature,
+            confidence_threshold=config.distillation.confidence_threshold,
+        )
     optimizer = torch.optim.AdamW(
         model.parameters(),
         lr=training.learning_rate,
@@ -146,6 +160,10 @@ def train_experiment(
             max_batches=max_train_batches,
             mixed_precision=amp_enabled,
             scaler=scaler,
+            distillation_loss_function=distillation_loss_function,
+            distillation_weight=(
+                config.distillation.weight if config.distillation is not None else 0.0
+            ),
         )
         validation_metrics = _run_epoch(
             model=model,
@@ -157,6 +175,8 @@ def train_experiment(
             max_batches=max_validation_batches,
             mixed_precision=amp_enabled,
             scaler=None,
+            distillation_loss_function=None,
+            distillation_weight=0.0,
         )
         scheduler.step()
         epochs_completed = epoch
@@ -171,6 +191,7 @@ def train_experiment(
         print(
             f"epoch={epoch:03d}/{training.epochs:03d} "
             f"train_loss={train_metrics.loss:.4f} train_dice={train_metrics.dice:.4f} "
+            f"train_kd={train_metrics.distillation_loss:.4f} "
             f"val_loss={validation_metrics.loss:.4f} val_dice={validation_metrics.dice:.4f} "
             f"val_iou={validation_metrics.iou:.4f}"
         )
@@ -236,13 +257,15 @@ def _run_epoch(
     max_batches: int | None,
     mixed_precision: bool,
     scaler: torch.amp.GradScaler | None,
+    distillation_loss_function: BinaryLogitDistillationLoss | None,
+    distillation_weight: float,
 ) -> EpochResult:
     is_training = optimizer is not None
     model.train(is_training)
     if is_training and freeze_batch_norm:
         _freeze_batch_norm_statistics(model)
     accumulator = BinaryMetricsAccumulator()
-    totals = {"total": 0.0, "bce": 0.0, "dice": 0.0}
+    totals = {"total": 0.0, "bce": 0.0, "dice": 0.0, "distillation": 0.0}
     sample_count = 0
 
     grad_context = torch.enable_grad() if is_training else torch.no_grad()
@@ -262,19 +285,32 @@ def _run_epoch(
             ):
                 logits = model(images)
                 losses = loss_function(logits, masks, valid_masks)
+                distillation_loss = logits.sum() * 0.0
+                if distillation_loss_function is not None:
+                    teacher_logits = batch["teacher_logit"].to(device, non_blocking=True)
+                    confidence = batch["teacher_confidence"].to(device, non_blocking=True)
+                    distillation_loss = distillation_loss_function(
+                        logits,
+                        teacher_logits,
+                        valid_masks,
+                        confidence,
+                    )
+                combined_loss = losses["total"] + distillation_weight * distillation_loss
             if is_training:
                 if scaler is not None and scaler.is_enabled():
-                    scaler.scale(losses["total"]).backward()
+                    scaler.scale(combined_loss).backward()
                     scaler.step(optimizer)
                     scaler.update()
                 else:
-                    losses["total"].backward()
+                    combined_loss.backward()
                     optimizer.step()
 
             batch_size = images.shape[0]
             sample_count += batch_size
-            for name in totals:
-                totals[name] += float(losses[name].detach().cpu()) * batch_size
+            totals["total"] += float(combined_loss.detach().cpu()) * batch_size
+            totals["bce"] += float(losses["bce"].detach().cpu()) * batch_size
+            totals["dice"] += float(losses["dice"].detach().cpu()) * batch_size
+            totals["distillation"] += float(distillation_loss.detach().cpu()) * batch_size
             accumulator.update(logits.detach(), masks, valid_masks)
 
     if sample_count == 0:
@@ -284,6 +320,7 @@ def _run_epoch(
         loss=totals["total"] / sample_count,
         bce=totals["bce"] / sample_count,
         dice_loss=totals["dice"] / sample_count,
+        distillation_loss=totals["distillation"] / sample_count,
         samples=sample_count,
         **metrics,
     )
@@ -392,7 +429,14 @@ def _write_run_metadata(
         "cuda_available": torch.cuda.is_available(),
         "git_commit": _git_commit(),
         "process_id": os.getpid(),
+        "dataset_manifest_sha256": _sha256_file(config.data.manifest),
     }
+    if config.distillation is not None:
+        teacher_metadata_path = config.distillation.cache_root / "metadata.json"
+        if teacher_metadata_path.is_file():
+            metadata["teacher_cache_metadata"] = json.loads(
+                teacher_metadata_path.read_text(encoding="utf-8")
+            )
     (output_directory / "run.json").write_text(
         json.dumps(metadata, indent=2),
         encoding="utf-8",
@@ -419,6 +463,14 @@ def _git_commit() -> str | None:
         ).stdout.strip()
     except (OSError, subprocess.CalledProcessError):
         return None
+
+
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def _set_seed(seed: int) -> None:

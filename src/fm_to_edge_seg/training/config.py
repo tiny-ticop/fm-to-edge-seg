@@ -48,6 +48,15 @@ class TrainingConfig:
 
 
 @dataclass(frozen=True)
+class DistillationConfig:
+    teacher: str
+    cache_root: Path
+    temperature: float
+    weight: float
+    confidence_threshold: float
+
+
+@dataclass(frozen=True)
 class ExperimentConfig:
     experiment_id: str
     seed: int
@@ -58,6 +67,7 @@ class ExperimentConfig:
     augmentation: AugmentationConfig
     training: TrainingConfig
     source_path: Path
+    distillation: DistillationConfig | None = None
 
 
 def load_experiment_config(path: Path) -> ExperimentConfig:
@@ -70,6 +80,17 @@ def load_experiment_config(path: Path) -> ExperimentConfig:
     training = experiment.get("training", {})
     augmentation = experiment.get("augmentation", {})
     input_config = data["input"]
+    distillation = None
+    if experiment.get("distillation"):
+        distillation_data = _load_yaml(_resolve_reference(root, experiment["distillation"]))
+        if distillation_data.get("enabled", True):
+            distillation = DistillationConfig(
+                teacher=str(distillation_data["teacher"]),
+                cache_root=_resolve_reference(root, distillation_data["cache_root"]),
+                temperature=float(distillation_data.get("temperature", 2.0)),
+                weight=float(distillation_data.get("weight", 1.0)),
+                confidence_threshold=float(distillation_data.get("confidence_threshold", 0.0)),
+            )
 
     config = ExperimentConfig(
         experiment_id=str(experiment["experiment_id"]),
@@ -104,6 +125,7 @@ def load_experiment_config(path: Path) -> ExperimentConfig:
             mixed_precision=bool(training.get("mixed_precision", True)),
         ),
         source_path=path,
+        distillation=distillation,
     )
     _validate_config(config)
     return config
@@ -134,5 +156,7 @@ def _validate_config(config: ExperimentConfig) -> None:
         raise ValueError("epochs and batch_size must be positive")
     if config.training.learning_rate <= 0:
         raise ValueError("learning_rate must be positive")
+    if config.distillation is not None and config.distillation.weight < 0:
+        raise ValueError("distillation weight must be non-negative")
     if not config.data.manifest.is_file():
         raise FileNotFoundError(f"Dataset manifest does not exist: {config.data.manifest}")

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import torch
 
-from fm_to_edge_seg.losses import BinarySegmentationLoss
+from fm_to_edge_seg.losses import BinaryLogitDistillationLoss, BinarySegmentationLoss
 from fm_to_edge_seg.models import MobileNetV3LiteUNet
 
 
@@ -52,3 +52,30 @@ def test_one_optimization_step_updates_student() -> None:
 
     assert torch.isfinite(loss)
     assert not torch.equal(before, model.classifier.weight.detach())
+
+
+def test_logit_distillation_is_zero_for_matching_teacher() -> None:
+    loss_function = BinaryLogitDistillationLoss(temperature=2.0)
+    logits = torch.tensor([[[[-2.0, 2.0]]]])
+    valid = torch.ones_like(logits, dtype=torch.bool)
+    confidence = torch.ones_like(logits)
+
+    matching = loss_function(logits, logits, valid, confidence)
+    different = loss_function(-logits, logits, valid, confidence)
+
+    assert torch.allclose(matching, torch.tensor(0.0), atol=1e-6)
+    assert different > matching
+
+
+def test_logit_distillation_can_ignore_low_confidence_pixels() -> None:
+    loss_function = BinaryLogitDistillationLoss(temperature=1.0, confidence_threshold=0.8)
+    student = torch.tensor([[[[-4.0, 4.0]]]], requires_grad=True)
+    teacher = -student.detach()
+    valid = torch.ones_like(student, dtype=torch.bool)
+    confidence = torch.tensor([[[[0.1, 0.2]]]])
+
+    loss = loss_function(student, teacher, valid, confidence)
+    loss.backward()
+
+    assert loss.item() == 0.0
+    assert student.grad is not None
