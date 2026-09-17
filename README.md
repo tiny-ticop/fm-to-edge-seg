@@ -17,6 +17,7 @@ DeepCrackのデータ準備、軽量Baseline、SAM 3 logit KD、DINOv3 feature K
 5. E004: DINOv3 feature distillation
 6. E005: 合成撮像変化 + 実`ood_test`による汎化・Robustness評価
 7. E006: FP32 ONNX export + CPU benchmark
+8. E007: ONNX Runtime INT8 static PTQ + 精度・速度・サイズ比較
 
 ## 開発環境
 
@@ -77,6 +78,8 @@ SAM 3 / DINOv3の公式weight利用申請、認証、業務利用前の確認事
 明るさ・色味・ノイズ・ぼけと実`ood_test`による汎化評価は [docs/robustness-evaluation.md](docs/robustness-evaluation.md) にあります。
 
 学習済みStudentのONNX変換、PyTorchとの出力一致検査、CPU benchmarkは [docs/onnx-edge.md](docs/onnx-edge.md) にあります。
+
+INT8静的量子化、calibration、FP32との精度・速度・サイズ比較は [docs/int8-quantization.md](docs/int8-quantization.md) にあります。
 
 ## GitHubとVS Code
 

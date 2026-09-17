@@ -139,6 +139,36 @@ def build_parser() -> argparse.ArgumentParser:
     onnx_benchmark_parser.add_argument("--runs", type=int, default=100)
     onnx_benchmark_parser.add_argument("--threads", type=int, default=1)
     onnx_benchmark_parser.add_argument("--seed", type=int, default=42)
+    quantize_parser = subparsers.add_parser(
+        "quantize-onnx",
+        help="Apply static INT8 QDQ quantization using manifest calibration images.",
+    )
+    quantize_parser.add_argument("config", type=Path)
+    quantize_parser.add_argument("fp32_model", type=Path)
+    quantize_parser.add_argument("int8_model", type=Path)
+    quantize_parser.add_argument("--split", default="train")
+    quantize_parser.add_argument("--calibration-samples", type=int, default=32)
+    quantize_parser.add_argument(
+        "--calibration-method",
+        choices=("minmax", "entropy", "percentile"),
+        default="minmax",
+    )
+    quantize_parser.add_argument(
+        "--per-channel",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+    )
+    onnx_evaluate_parser = subparsers.add_parser(
+        "evaluate-onnx",
+        help="Evaluate FP32 or INT8 ONNX segmentation accuracy on a manifest split.",
+    )
+    onnx_evaluate_parser.add_argument("config", type=Path)
+    onnx_evaluate_parser.add_argument("model", type=Path)
+    onnx_evaluate_parser.add_argument("output", type=Path)
+    onnx_evaluate_parser.add_argument("--split", default="test")
+    onnx_evaluate_parser.add_argument("--num-workers", type=int, default=0)
+    onnx_evaluate_parser.add_argument("--threads", type=int, default=1)
+    onnx_evaluate_parser.add_argument("--max-samples", type=int, default=None)
     cache_parser = subparsers.add_parser(
         "create-reference-teacher-cache",
         help="Create a label-derived teacher cache to verify the distillation pipeline.",
@@ -402,6 +432,50 @@ def main(argv: list[str] | None = None) -> int:
             f"threads={result.intra_op_threads}"
         )
         print(f"report: {args.output.resolve()}")
+        return 0
+    if args.command == "quantize-onnx":
+        from fm_to_edge_seg.deployment import quantize_onnx_static
+        from fm_to_edge_seg.training.config import load_experiment_config
+
+        config = load_experiment_config(args.config)
+        result = quantize_onnx_static(
+            config=config,
+            fp32_model_path=args.fp32_model,
+            int8_model_path=args.int8_model,
+            calibration_split=args.split,
+            calibration_samples=args.calibration_samples,
+            calibration_method=args.calibration_method,
+            per_channel=args.per_channel,
+        )
+        print(
+            f"quantization_complete: samples={result.calibration_samples}, "
+            f"size={result.fp32_size_megabytes:.2f}->{result.int8_size_megabytes:.2f} MiB, "
+            f"reduction={result.size_reduction_percent:.1f}%, "
+            f"probe_mean_error={result.parity_mean_absolute_error:.6f}"
+        )
+        print(f"model: {result.int8_model_path}")
+        print(f"metadata: {result.metadata_path}")
+        return 0
+    if args.command == "evaluate-onnx":
+        from fm_to_edge_seg.evaluation.onnx_evaluator import evaluate_onnx
+        from fm_to_edge_seg.training.config import load_experiment_config
+
+        config = load_experiment_config(args.config)
+        result = evaluate_onnx(
+            config=config,
+            model_path=args.model,
+            output_directory=args.output,
+            split=args.split,
+            num_workers=args.num_workers,
+            intra_op_threads=args.threads,
+            max_samples=args.max_samples,
+        )
+        print(
+            f"onnx_evaluation_complete: split={result.split}, samples={result.samples}, "
+            f"dice={result.dice:.4f}, iou={result.iou:.4f}, "
+            f"milliseconds_per_image={result.milliseconds_per_image:.2f}"
+        )
+        print(f"artifacts: {args.output.resolve()}")
         return 0
     if args.command == "create-reference-teacher-cache":
         from fm_to_edge_seg.distillation import create_reference_teacher_cache
