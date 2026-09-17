@@ -8,6 +8,7 @@ from pathlib import Path
 from fm_to_edge_seg import __version__
 from fm_to_edge_seg.data.deepcrack import prepare_deepcrack
 from fm_to_edge_seg.data.manifest import validate_manifest
+from fm_to_edge_seg.data.preview import create_dataset_preview
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -41,6 +42,15 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Allow replacing files previously generated in the output directory.",
     )
+    preview_parser = subparsers.add_parser(
+        "preview-dataset",
+        help="Create a contact sheet of images, masks, and overlays.",
+    )
+    preview_parser.add_argument("manifest", type=Path)
+    preview_parser.add_argument("output", type=Path)
+    preview_parser.add_argument("--split", default="train")
+    preview_parser.add_argument("--limit", type=int, default=8)
+    preview_parser.add_argument("--seed", type=int, default=42)
     return parser
 
 
@@ -71,9 +81,17 @@ def main(argv: list[str] | None = None) -> int:
         print(f"manifest: {result.manifest_path}")
         print(
             "samples: "
-            + ", ".join(
-                f"{split}={count}" for split, count in sorted(result.split_counts.items())
-            )
+            + ", ".join(f"{split}={count}" for split, count in sorted(result.split_counts.items()))
         )
+        return 0
+    if args.command == "preview-dataset":
+        result = create_dataset_preview(
+            manifest_path=args.manifest,
+            output_path=args.output,
+            split=args.split,
+            limit=args.limit,
+            seed=args.seed,
+        )
+        print(f"preview: {result}")
         return 0
     raise ValueError(f"Unsupported command: {args.command}")

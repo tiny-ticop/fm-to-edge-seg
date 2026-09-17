@@ -24,7 +24,10 @@ class DeepCrackPreparationTest(unittest.TestCase):
 
             self.assertEqual(first.split_counts, {"train": 3, "val": 2, "test": 2})
             self.assertTrue(validate_manifest(first.manifest_path).is_valid)
-            self.assertEqual(self._split_map(first.manifest_path), self._split_map(second.manifest_path))
+            self.assertEqual(
+                self._split_map(first.manifest_path),
+                self._split_map(second.manifest_path),
+            )
 
             generated_masks = sorted((first.manifest_path.parent / "masks").rglob("*.png"))
             generated_mask = np.asarray(Image.open(generated_masks[0]))

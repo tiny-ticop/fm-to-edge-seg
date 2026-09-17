@@ -13,4 +13,3 @@ __all__ = [
     "load_manifest",
     "validate_manifest",
 ]
-

@@ -53,14 +53,14 @@ class DatasetValidationReport:
             f"manifest: {self.manifest_path}",
             f"samples: {self.sample_count}",
             "splits: "
-            + (", ".join(f"{name}={count}" for name, count in sorted(self.split_counts.items()))
-               or "none"),
+            + (
+                ", ".join(f"{name}={count}" for name, count in sorted(self.split_counts.items()))
+                or "none"
+            ),
             f"errors: {self.error_count}",
             f"warnings: {self.warning_count}",
         ]
-        lines.extend(
-            f"[{issue.level}] {issue.sample_id}: {issue.message}" for issue in self.issues
-        )
+        lines.extend(f"[{issue.level}] {issue.sample_id}: {issue.message}" for issue in self.issues)
         return "\n".join(lines)
 
 
@@ -89,7 +89,9 @@ def load_manifest(manifest_path: Path, data_root: Path | None = None) -> list[Ma
                     image_path=_resolve_data_path(root, row["image_path"]),
                     mask_path=_resolve_data_path(root, row["mask_path"]),
                     split=row["split"].strip(),
-                    metadata={key: value for key, value in row.items() if key not in REQUIRED_COLUMNS},
+                    metadata={
+                        key: value for key, value in row.items() if key not in REQUIRED_COLUMNS
+                    },
                 )
             )
     return records
@@ -160,7 +162,9 @@ def _validate_record(record: ManifestRecord, report: DatasetValidationReport) ->
             mask_size = mask.size
             mask_array = np.asarray(mask)
     except (OSError, UnidentifiedImageError) as error:
-        report.issues.append(ValidationIssue("error", record.sample_id, f"image decode failed: {error}"))
+        report.issues.append(
+            ValidationIssue("error", record.sample_id, f"image decode failed: {error}")
+        )
         return
 
     if image_size != mask_size:
@@ -194,4 +198,3 @@ def _validate_record(record: ManifestRecord, report: DatasetValidationReport) ->
         )
     if 1 not in values:
         report.issues.append(ValidationIssue("warning", record.sample_id, "mask has no foreground"))
-

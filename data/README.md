@@ -30,4 +30,14 @@ sample_0001,images/sample_0001.jpg,masks/sample_0001.png,train
 python -m fm_to_edge_seg validate-manifest data/deepcrack/manifest.csv
 ```
 
+画像、mask、重ね合わせの一覧を生成します。
+
+```powershell
+python -m fm_to_edge_seg preview-dataset `
+  data/deepcrack/manifest.csv `
+  artifacts/data_preview/deepcrack_train.png `
+  --split train `
+  --limit 8
+```
+
 DeepCrackは配布元の利用条件に従い、データ本体をこのリポジトリへ再配布しません。業務画像、派生mask、teacher cache、checkpointも個人GitHubへ追加しません。

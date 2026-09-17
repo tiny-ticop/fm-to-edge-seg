@@ -31,7 +31,8 @@ PowerShellの場合:
 python -m venv .venv
 .venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
-pip install -e ".[dev]"
+pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+pip install -e ".[train,dev]"
 python -m fm_to_edge_seg doctor
 python -m unittest discover -s tests
 pytest
@@ -42,6 +43,8 @@ pytest
 ```powershell
 Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 ```
+
+上記はGPU非搭載PC向けのCPU版PyTorchです。Colabではランタイムに用意されたPyTorchを利用します。
 
 ## データの置き場所
 
