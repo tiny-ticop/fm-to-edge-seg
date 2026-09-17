@@ -1,0 +1,452 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>fm-to-edge-seg | 実装状況とモデル小型化フロー</title>
+  <style>
+    :root {
+      --bg: #08111f;
+      --surface: #101d30;
+      --surface-2: #172840;
+      --ink: #edf5ff;
+      --muted: #a9bad0;
+      --line: #304968;
+      --blue: #53b7ff;
+      --cyan: #4de2d0;
+      --green: #71e39b;
+      --orange: #ffbd66;
+      --pink: #ff82aa;
+      --purple: #b9a0ff;
+      --red: #ff7d7d;
+      --max: 1180px;
+      font-family: Inter, "Noto Sans JP", "Yu Gothic UI", "Yu Gothic", Meiryo, sans-serif;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 8% 0%, rgba(83,183,255,.16), transparent 32rem),
+        radial-gradient(circle at 95% 18%, rgba(185,160,255,.12), transparent 28rem),
+        var(--bg);
+      line-height: 1.75;
+    }
+    a { color: var(--blue); }
+    code, pre { font-family: "Cascadia Code", Consolas, monospace; }
+    code { color: #c8f3ff; }
+    header, main, footer { width: min(var(--max), calc(100% - 32px)); margin-inline: auto; }
+    header { padding: 72px 0 38px; }
+    .eyebrow { color: var(--cyan); font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
+    h1 { max-width: 900px; margin: 8px 0 14px; font-size: clamp(2.1rem, 5vw, 4.2rem); line-height: 1.12; }
+    h2 { margin: 0 0 18px; font-size: clamp(1.45rem, 3vw, 2.15rem); line-height: 1.3; }
+    h3 { margin: 0 0 8px; font-size: 1.08rem; }
+    p { margin: 0 0 14px; }
+    .lead { max-width: 880px; color: var(--muted); font-size: 1.1rem; }
+    .meta { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 24px; }
+    .pill, .tag {
+      display: inline-flex; align-items: center; gap: 7px;
+      border: 1px solid var(--line); border-radius: 999px;
+      padding: 5px 11px; background: rgba(16,29,48,.75); color: var(--muted); font-size: .84rem;
+    }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); box-shadow: 0 0 12px var(--green); }
+    nav {
+      position: sticky; top: 0; z-index: 10; border-block: 1px solid var(--line);
+      background: rgba(8,17,31,.9); backdrop-filter: blur(14px);
+    }
+    nav .inner { width: min(var(--max), calc(100% - 32px)); margin: auto; display: flex; gap: 20px; overflow-x: auto; }
+    nav a { padding: 12px 0; white-space: nowrap; color: var(--muted); text-decoration: none; font-size: .9rem; }
+    nav a:hover { color: var(--ink); }
+    main { padding: 34px 0 80px; }
+    section { padding: 36px 0; scroll-margin-top: 58px; }
+    .card {
+      border: 1px solid var(--line); border-radius: 18px; padding: 22px;
+      background: linear-gradient(145deg, rgba(23,40,64,.9), rgba(12,24,41,.92));
+      box-shadow: 0 16px 50px rgba(0,0,0,.18);
+    }
+    .grid { display: grid; gap: 16px; }
+    .grid-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .grid-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .metric { font-size: 2rem; font-weight: 850; line-height: 1.1; }
+    .metric-label { color: var(--muted); font-size: .88rem; }
+    .ok { color: var(--green); }
+    .pending { color: var(--orange); }
+    .teacher { color: var(--purple); }
+    .edge { color: var(--cyan); }
+    .callout { border-left: 4px solid var(--orange); padding: 13px 16px; border-radius: 0 10px 10px 0; background: rgba(255,189,102,.08); }
+    .key-point { border-color: rgba(77,226,208,.55); background: rgba(77,226,208,.07); }
+    .key-point strong { color: var(--cyan); }
+    .diagram {
+      overflow-x: auto; border: 1px solid var(--line); border-radius: 18px;
+      background: #0b1728; padding: 10px;
+    }
+    .diagram svg { display: block; width: 100%; min-width: 900px; height: auto; }
+    .legend { display: flex; flex-wrap: wrap; gap: 12px; margin: 14px 0 0; color: var(--muted); font-size: .86rem; }
+    .swatch { width: 12px; height: 12px; border-radius: 3px; display: inline-block; margin-right: 4px; }
+    table { width: 100%; border-collapse: collapse; font-size: .92rem; }
+    th, td { padding: 11px 12px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--line); }
+    th { color: var(--cyan); background: rgba(77,226,208,.06); }
+    .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 14px; }
+    .table-wrap table { min-width: 760px; }
+    .status { font-weight: 800; white-space: nowrap; }
+    .timeline { display: grid; grid-template-columns: 76px 1fr; gap: 0 16px; }
+    .timeline .id { color: var(--cyan); font-weight: 900; padding: 14px 0; border-right: 2px solid var(--line); }
+    .timeline .item { padding: 12px 0 18px; }
+    .formula { border: 1px dashed var(--line); border-radius: 12px; background: #0a1423; padding: 12px 15px; overflow-x: auto; }
+    .flow-list { list-style: none; padding: 0; margin: 0; counter-reset: flow; }
+    .flow-list li { position: relative; padding: 0 0 22px 44px; }
+    .flow-list li::before {
+      counter-increment: flow; content: counter(flow); position: absolute; left: 0; top: 0;
+      display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%;
+      color: #06121e; background: var(--cyan); font-weight: 900;
+    }
+    .flow-list li:not(:last-child)::after { content: ""; position: absolute; left: 13px; top: 29px; height: calc(100% - 28px); border-left: 2px solid var(--line); }
+    pre { margin: 10px 0 0; padding: 14px; overflow-x: auto; border-radius: 10px; background: #060e19; color: #d7f5ff; font-size: .84rem; line-height: 1.55; }
+    .small { color: var(--muted); font-size: .87rem; }
+    .file-map a { text-decoration: none; }
+    footer { padding: 24px 0 48px; border-top: 1px solid var(--line); color: var(--muted); font-size: .85rem; }
+    @media (max-width: 820px) {
+      .grid-3, .grid-2 { grid-template-columns: 1fr; }
+      header { padding-top: 46px; }
+      section { padding: 28px 0; }
+    }
+    @media print {
+      :root { --bg: #fff; --surface: #fff; --surface-2: #f5f7fa; --ink: #102033; --muted: #526274; --line: #bdc7d3; }
+      body { background: #fff; }
+      nav { display: none; }
+      .card, .diagram { break-inside: avoid; box-shadow: none; background: #fff; }
+      section { break-inside: auto; }
+      a { color: #145ca8; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="eyebrow">Research PoC / Implementation status</div>
+    <h1>fm-to-edge-seg<br>実装状況とモデル小型化フロー</h1>
+    <p class="lead">
+      SAM 3の対象領域知識とDINOv3の汎用視覚表現を、MobileNetV3ベースの軽量binary segmentation Studentへ学習時だけ移し、
+      最終的にRaspberry Pi 5相当のCPUで動くONNX / INT8モデルを作る研究PoCです。
+    </p>
+    <div class="meta">
+      <span class="pill"><span class="dot"></span>コード基盤 E000〜E007 実装済み</span>
+      <span class="pill">基準commit: <code>5500d16</code></span>
+      <span class="pill">更新日: 2026-09-18</span>
+      <span class="pill">自動テスト: 27 passed</span>
+    </div>
+  </header>
+
+  <nav aria-label="ページ内ナビゲーション">
+    <div class="inner">
+      <a href="#summary">概要</a>
+      <a href="#distillation">蒸留の全体図</a>
+      <a href="#teachers">教師の役割</a>
+      <a href="#student">Student構造</a>
+      <a href="#edge-flow">Edge化</a>
+      <a href="#experiments">実験段階</a>
+      <a href="#status">実装済み／未検証</a>
+      <a href="#run">実行の入口</a>
+    </div>
+  </nav>
+
+  <main>
+    <section id="summary">
+      <h2>1. 現在地</h2>
+      <div class="grid grid-3">
+        <article class="card">
+          <div class="metric ok">実装済み</div>
+          <div class="metric-label">データ準備 → 学習 → 評価 → 蒸留 → ONNX → INT8</div>
+          <p class="small">各処理をCLIとYAML configで再利用でき、DeepCrackと業務画像で同じコード経路を使えます。</p>
+        </article>
+        <article class="card">
+          <div class="metric teacher">2種類</div>
+          <div class="metric-label">Foundation Modelの教師情報</div>
+          <p class="small">SAM 3はmask・confidence、DINOv3はdense featureをオフラインcacheとして渡します。</p>
+        </article>
+        <article class="card">
+          <div class="metric pending">結果待ち</div>
+          <div class="metric-label">GPU・業務画像・Raspberry Piでの実測</div>
+          <p class="small">実装完了は性能達成を意味しません。精度・汎化・25 FPS可否は、各環境での実験結果から判断します。</p>
+        </article>
+      </div>
+      <div class="card key-point" style="margin-top:16px">
+        <strong>最も重要な設計:</strong>
+        SAM 3とDINOv3は学習データを作るGPU側の「教師」です。Raspberry Piへ配置する推論モデルには、教師モデル、teacher cache、DINOv3用projection headを含めません。
+        Edge側に残るのは軽量Studentだけです。
+      </div>
+    </section>
+
+    <section id="distillation">
+      <h2>2. 知識蒸留の全体図</h2>
+      <p>同じ画像を3経路へ入力します。人手GTが正解を教え、SAM 3が対象領域、DINOv3が一般的な視覚構造を補助的に教えます。</p>
+      <div class="diagram" role="img" aria-label="SAM 3、DINOv3、人手マスクから軽量Studentへ知識蒸留する全体フロー">
+        <svg viewBox="0 0 1200 690" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#7895b8"/></marker>
+            <marker id="arrowCyan" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#4de2d0"/></marker>
+            <filter id="glow"><feGaussianBlur stdDeviation="3" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+          </defs>
+          <rect x="10" y="10" width="1180" height="670" rx="20" fill="#0b1728"/>
+
+          <text x="36" y="45" fill="#a9bad0" font-size="16">GPU学習環境（教師はcache生成時だけ実行）</text>
+          <rect x="35" y="275" width="150" height="100" rx="14" fill="#1b3854" stroke="#53b7ff" stroke-width="2"/>
+          <text x="110" y="315" text-anchor="middle" fill="#edf5ff" font-size="20" font-weight="700">入力画像</text>
+          <text x="110" y="344" text-anchor="middle" fill="#a9bad0" font-size="14">DeepCrack / 糸画像</text>
+
+          <rect x="250" y="70" width="205" height="112" rx="14" fill="#302a58" stroke="#b9a0ff" stroke-width="2"/>
+          <text x="352" y="105" text-anchor="middle" fill="#edf5ff" font-size="21" font-weight="700">SAM 3</text>
+          <text x="352" y="134" text-anchor="middle" fill="#c8bbff" font-size="14">画像 + text prompt</text>
+          <text x="352" y="158" text-anchor="middle" fill="#a9bad0" font-size="13">crack / thread / yarn</text>
+          <rect x="515" y="70" width="205" height="112" rx="14" fill="#252c4a" stroke="#b9a0ff" stroke-width="2"/>
+          <text x="617" y="105" text-anchor="middle" fill="#edf5ff" font-size="18" font-weight="700">SAM teacher cache</text>
+          <text x="617" y="134" text-anchor="middle" fill="#c8bbff" font-size="14">pseudo-logit + confidence</text>
+          <text x="617" y="158" text-anchor="middle" fill="#a9bad0" font-size="13">画像ごとに固定保存</text>
+
+          <rect x="250" y="500" width="205" height="112" rx="14" fill="#253750" stroke="#53b7ff" stroke-width="2"/>
+          <text x="352" y="535" text-anchor="middle" fill="#edf5ff" font-size="21" font-weight="700">DINOv3 ViT-S/16</text>
+          <text x="352" y="564" text-anchor="middle" fill="#8ed7ff" font-size="14">汎用dense patch feature</text>
+          <text x="352" y="588" text-anchor="middle" fill="#a9bad0" font-size="13">C=384, stride=16</text>
+          <rect x="515" y="500" width="205" height="112" rx="14" fill="#1c334a" stroke="#53b7ff" stroke-width="2"/>
+          <text x="617" y="535" text-anchor="middle" fill="#edf5ff" font-size="18" font-weight="700">DINO feature cache</text>
+          <text x="617" y="564" text-anchor="middle" fill="#8ed7ff" font-size="14">384 × 24 × 34</text>
+          <text x="617" y="588" text-anchor="middle" fill="#a9bad0" font-size="13">float16で再利用</text>
+
+          <rect x="250" y="273" width="205" height="105" rx="14" fill="#204035" stroke="#71e39b" stroke-width="2"/>
+          <text x="352" y="310" text-anchor="middle" fill="#edf5ff" font-size="20" font-weight="700">人手GT mask</text>
+          <text x="352" y="339" text-anchor="middle" fill="#a8f0be" font-size="14">背景 0 / 前景 1</text>
+          <text x="352" y="361" text-anchor="middle" fill="#a9bad0" font-size="13">学習の主教師</text>
+
+          <rect x="515" y="270" width="205" height="112" rx="14" fill="#243d40" stroke="#4de2d0" stroke-width="3" filter="url(#glow)"/>
+          <text x="617" y="306" text-anchor="middle" fill="#edf5ff" font-size="21" font-weight="700">Small Student</text>
+          <text x="617" y="335" text-anchor="middle" fill="#86f6e7" font-size="14">MobileNetV3-Small</text>
+          <text x="617" y="358" text-anchor="middle" fill="#a9bad0" font-size="13">+ Lite U-Net decoder</text>
+
+          <rect x="785" y="70" width="190" height="112" rx="14" fill="#3b2941" stroke="#ff82aa" stroke-width="2"/>
+          <text x="880" y="108" text-anchor="middle" fill="#edf5ff" font-size="18" font-weight="700">Logit KD Loss</text>
+          <text x="880" y="137" text-anchor="middle" fill="#ffc1d4" font-size="14">T=2 / weight=0.5</text>
+          <text x="880" y="160" text-anchor="middle" fill="#a9bad0" font-size="13">confidence ≥ 0.5</text>
+          <rect x="785" y="270" width="190" height="112" rx="14" fill="#30422d" stroke="#71e39b" stroke-width="2"/>
+          <text x="880" y="308" text-anchor="middle" fill="#edf5ff" font-size="18" font-weight="700">Supervised Loss</text>
+          <text x="880" y="338" text-anchor="middle" fill="#b3f4c8" font-size="14">BCE + Dice</text>
+          <text x="880" y="361" text-anchor="middle" fill="#a9bad0" font-size="13">全実験の土台</text>
+          <rect x="785" y="500" width="190" height="112" rx="14" fill="#2b354f" stroke="#53b7ff" stroke-width="2"/>
+          <text x="880" y="535" text-anchor="middle" fill="#edf5ff" font-size="18" font-weight="700">Feature KD Loss</text>
+          <text x="880" y="564" text-anchor="middle" fill="#8ed7ff" font-size="14">cosine / weight=0.25</text>
+          <text x="880" y="588" text-anchor="middle" fill="#a9bad0" font-size="13">s16 projection 48→384</text>
+
+          <rect x="1030" y="270" width="135" height="112" rx="14" fill="#3d3922" stroke="#ffbd66" stroke-width="2"/>
+          <text x="1097" y="307" text-anchor="middle" fill="#edf5ff" font-size="18" font-weight="700">Total Loss</text>
+          <text x="1097" y="337" text-anchor="middle" fill="#ffe0a3" font-size="13">更新するのは</text>
+          <text x="1097" y="359" text-anchor="middle" fill="#ffe0a3" font-size="13">Studentのみ</text>
+
+          <path d="M185 300 C215 300,215 126,250 126" fill="none" stroke="#7895b8" stroke-width="2" marker-end="url(#arrow)"/>
+          <path d="M185 325 L250 325" fill="none" stroke="#7895b8" stroke-width="2" marker-end="url(#arrow)"/>
+          <path d="M185 350 C215 350,215 556,250 556" fill="none" stroke="#7895b8" stroke-width="2" marker-end="url(#arrow)"/>
+          <path d="M455 126 L515 126" fill="none" stroke="#b9a0ff" stroke-width="3" marker-end="url(#arrow)"/>
+          <path d="M455 325 L515 325" fill="none" stroke="#71e39b" stroke-width="3" marker-end="url(#arrow)"/>
+          <path d="M455 556 L515 556" fill="none" stroke="#53b7ff" stroke-width="3" marker-end="url(#arrow)"/>
+          <path d="M720 126 L785 126" fill="none" stroke="#b9a0ff" stroke-width="3" marker-end="url(#arrow)"/>
+          <path d="M720 305 C745 275,757 175,785 144" fill="none" stroke="#ff82aa" stroke-width="2" stroke-dasharray="7 6" marker-end="url(#arrow)"/>
+          <path d="M720 326 L785 326" fill="none" stroke="#71e39b" stroke-width="3" marker-end="url(#arrow)"/>
+          <path d="M720 350 C750 392,752 518,785 548" fill="none" stroke="#53b7ff" stroke-width="2" stroke-dasharray="7 6" marker-end="url(#arrow)"/>
+          <path d="M720 556 L785 556" fill="none" stroke="#53b7ff" stroke-width="3" marker-end="url(#arrow)"/>
+          <path d="M975 126 C1015 126,1000 294,1030 310" fill="none" stroke="#7895b8" stroke-width="2" marker-end="url(#arrow)"/>
+          <path d="M975 326 L1030 326" fill="none" stroke="#7895b8" stroke-width="2" marker-end="url(#arrow)"/>
+          <path d="M975 556 C1015 556,1000 358,1030 342" fill="none" stroke="#7895b8" stroke-width="2" marker-end="url(#arrow)"/>
+        </svg>
+      </div>
+      <div class="legend">
+        <span><i class="swatch" style="background:var(--green)"></i>人手教師・通常学習</span>
+        <span><i class="swatch" style="background:var(--purple)"></i>SAM 3領域教師</span>
+        <span><i class="swatch" style="background:var(--blue)"></i>DINOv3特徴教師</span>
+        <span><i class="swatch" style="background:var(--orange)"></i>Student更新</span>
+      </div>
+      <div class="grid grid-2" style="margin-top:16px">
+        <div class="card">
+          <h3>E003: SAM 3 logit蒸留</h3>
+          <div class="formula"><code>L = L<sub>BCE</sub> + L<sub>Dice</sub> + 0.5 × L<sub>logit-KD</sub></code></div>
+          <p class="small">SAM 3のinstance maskをbinary maskへ統合し、前景0.99・背景0.01相当のpseudo-logitへ変換。confidenceの低い領域はKD対象から外します。</p>
+        </div>
+        <div class="card">
+          <h3>E004b: DINOv3 feature蒸留</h3>
+          <div class="formula"><code>L = L<sub>BCE</sub> + L<sub>Dice</sub> + 0.25 × L<sub>cosine-feature</sub></code></div>
+          <p class="small">Studentのencoder_s16（48 channel）を学習用1×1 projectionで384 channelへ写し、DINOv3 patch featureとのcosine distanceを最小化します。</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="teachers">
+      <h2>3. 教師モデルは何を、どこで教えるか</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>教師</th><th>入力</th><th>Studentへ渡す知識</th><th>実装上の場所</th><th>Edge推論時</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><strong>人手GT mask</strong></td>
+              <td>画像と対になるbinary mask</td>
+              <td>糸／亀裂の正解領域。BCE + Diceで直接学習</td>
+              <td><code>data/*/manifest.csv</code></td>
+              <td>不要</td>
+            </tr>
+            <tr>
+              <td><strong class="teacher">SAM 3</strong></td>
+              <td>画像 + text prompt</td>
+              <td>対象の形状・領域、instance score由来confidence</td>
+              <td><code>create-sam3-teacher-cache</code> → <code>teacher_cache/</code></td>
+              <td><strong>搭載しない</strong></td>
+            </tr>
+            <tr>
+              <td><strong style="color:var(--blue)">DINOv3 ViT-S/16</strong></td>
+              <td>画像</td>
+              <td>形状・質感・部品構造・領域類似性を持つdense feature</td>
+              <td><code>create-dinov3-feature-cache</code> → <code>teacher_cache/</code></td>
+              <td><strong>搭載しない</strong></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="callout" style="margin-top:16px">
+        TeacherはStudentの各epochで毎回動かしません。GPU環境で一度cacheを作り、そのcacheを固定してLoss・Student構造・seedを比較します。
+        これにより、教師出力の変化を実験差へ混入させず、Foundation Modelの重い推論コストも学習ループから外せます。
+      </div>
+    </section>
+
+    <section id="student">
+      <h2>4. 軽量Studentの構造</h2>
+      <div class="diagram" role="img" aria-label="MobileNetV3-Small encoderとLite U-Net decoderによるStudent構造">
+        <svg viewBox="0 0 1200 300" xmlns="http://www.w3.org/2000/svg">
+          <defs><marker id="a2" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#4de2d0"/></marker></defs>
+          <rect width="1200" height="300" rx="18" fill="#0b1728"/>
+          <text x="38" y="42" fill="#a9bad0" font-size="15">推論時に残るネットワーク（約100万parameter）</text>
+          <rect x="38" y="100" width="130" height="76" rx="12" fill="#1b3854" stroke="#53b7ff" stroke-width="2"/>
+          <text x="103" y="132" text-anchor="middle" fill="#edf5ff" font-size="17" font-weight="700">RGB画像</text><text x="103" y="156" text-anchor="middle" fill="#a9bad0" font-size="12">544 × 384</text>
+          <rect x="220" y="78" width="330" height="122" rx="14" fill="#22354b" stroke="#53b7ff" stroke-width="2"/>
+          <text x="385" y="110" text-anchor="middle" fill="#edf5ff" font-size="18" font-weight="700">MobileNetV3-Small Encoder</text>
+          <text x="385" y="140" text-anchor="middle" fill="#8ed7ff" font-size="14">s2 → s4 → s8 → s16 → s32</text>
+          <text x="385" y="168" text-anchor="middle" fill="#a9bad0" font-size="12">ImageNet pretrained / skip features</text>
+          <rect x="600" y="78" width="330" height="122" rx="14" fill="#24403f" stroke="#4de2d0" stroke-width="2"/>
+          <text x="765" y="110" text-anchor="middle" fill="#edf5ff" font-size="18" font-weight="700">Lite U-Net Decoder</text>
+          <text x="765" y="140" text-anchor="middle" fill="#86f6e7" font-size="14">depthwise separable convolution</text>
+          <text x="765" y="168" text-anchor="middle" fill="#a9bad0" font-size="12">skip結合しながら段階的に復元</text>
+          <rect x="982" y="100" width="180" height="76" rx="12" fill="#3d3922" stroke="#ffbd66" stroke-width="2"/>
+          <text x="1072" y="132" text-anchor="middle" fill="#edf5ff" font-size="17" font-weight="700">1ch logits</text><text x="1072" y="156" text-anchor="middle" fill="#ffe0a3" font-size="12">sigmoid ≥ 0.5</text>
+          <path d="M168 138 L220 138" stroke="#4de2d0" stroke-width="3" marker-end="url(#a2)"/><path d="M550 138 L600 138" stroke="#4de2d0" stroke-width="3" marker-end="url(#a2)"/><path d="M930 138 L982 138" stroke="#4de2d0" stroke-width="3" marker-end="url(#a2)"/>
+          <path d="M430 200 C470 250,670 250,710 200" fill="none" stroke="#7895b8" stroke-width="2" stroke-dasharray="7 6" marker-end="url(#a2)"/>
+          <text x="570" y="267" text-anchor="middle" fill="#a9bad0" font-size="13">s4 / s8 / s16 skip connection</text>
+        </svg>
+      </div>
+      <div class="grid grid-3" style="margin-top:16px">
+        <div class="card"><h3>Feature projection</h3><p class="small">DINOv3蒸留時だけ使用。学習後は破棄するため、Edgeモデルのparameter数・latencyを増やしません。</p></div>
+        <div class="card"><h3>Teacher cache</h3><p class="small">学習時だけ参照。ONNXには含まれず、Edge端末へコピーする必要もありません。</p></div>
+        <div class="card"><h3>出力</h3><p class="small">binary semantic segmentation。個々の糸instance IDではなく、糸／亀裂領域か背景かを出力します。</p></div>
+      </div>
+    </section>
+
+    <section id="edge-flow">
+      <h2>5. 学習済みモデルをEdgeへ小型化するフロー</h2>
+      <div class="diagram" role="img" aria-label="PyTorch checkpointからONNX、INT8、Raspberry Piへ至るモデル小型化フロー">
+        <svg viewBox="0 0 1200 390" xmlns="http://www.w3.org/2000/svg">
+          <defs><marker id="a3" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#4de2d0"/></marker></defs>
+          <rect width="1200" height="390" rx="18" fill="#0b1728"/>
+          <rect x="32" y="105" width="170" height="105" rx="14" fill="#26364c" stroke="#53b7ff" stroke-width="2"/>
+          <text x="117" y="140" text-anchor="middle" fill="#edf5ff" font-size="18" font-weight="700">best.pt</text><text x="117" y="168" text-anchor="middle" fill="#a9bad0" font-size="13">PyTorch Student</text><text x="117" y="190" text-anchor="middle" fill="#a9bad0" font-size="12">教師は含まない</text>
+          <rect x="260" y="105" width="190" height="105" rx="14" fill="#203e42" stroke="#4de2d0" stroke-width="2"/>
+          <text x="355" y="140" text-anchor="middle" fill="#edf5ff" font-size="18" font-weight="700">FP32 ONNX</text><text x="355" y="168" text-anchor="middle" fill="#86f6e7" font-size="13">構造検査 + parity</text><text x="355" y="190" text-anchor="middle" fill="#a9bad0" font-size="12">最大誤差 ≤ 1e-4</text>
+          <rect x="510" y="105" width="195" height="105" rx="14" fill="#3c3421" stroke="#ffbd66" stroke-width="2"/>
+          <text x="607" y="140" text-anchor="middle" fill="#edf5ff" font-size="18" font-weight="700">INT8 Static PTQ</text><text x="607" y="168" text-anchor="middle" fill="#ffe0a3" font-size="13">train画像でcalibration</text><text x="607" y="190" text-anchor="middle" fill="#a9bad0" font-size="12">S8S8 / QDQ / Conv</text>
+          <rect x="765" y="105" width="190" height="105" rx="14" fill="#30304c" stroke="#b9a0ff" stroke-width="2"/>
+          <text x="860" y="140" text-anchor="middle" fill="#edf5ff" font-size="18" font-weight="700">公平な比較</text><text x="860" y="168" text-anchor="middle" fill="#c8bbff" font-size="13">精度・OOD・サイズ</text><text x="860" y="190" text-anchor="middle" fill="#a9bad0" font-size="12">mean / p95 latency</text>
+          <rect x="1010" y="105" width="160" height="105" rx="14" fill="#244231" stroke="#71e39b" stroke-width="3"/>
+          <text x="1090" y="140" text-anchor="middle" fill="#edf5ff" font-size="18" font-weight="700">Raspberry Pi 5</text><text x="1090" y="168" text-anchor="middle" fill="#b3f4c8" font-size="13">CPU inference</text><text x="1090" y="190" text-anchor="middle" fill="#a9bad0" font-size="12">目標: 可能なら25 FPS</text>
+          <path d="M202 158 L260 158" stroke="#4de2d0" stroke-width="3" marker-end="url(#a3)"/><path d="M450 158 L510 158" stroke="#4de2d0" stroke-width="3" marker-end="url(#a3)"/><path d="M705 158 L765 158" stroke="#4de2d0" stroke-width="3" marker-end="url(#a3)"/><path d="M955 158 L1010 158" stroke="#4de2d0" stroke-width="3" marker-end="url(#a3)"/>
+          <rect x="260" y="270" width="695" height="70" rx="12" fill="#18263a" stroke="#304968"/>
+          <text x="607" y="298" text-anchor="middle" fill="#edf5ff" font-size="15" font-weight="700">採用条件: test / ood_test Dice低下、モデルサイズ、CPU速度、予測画像をすべて確認</text>
+          <text x="607" y="323" text-anchor="middle" fill="#a9bad0" font-size="13">INT8は必ず高速とは限らないため、最終判断はターゲットSBCで実測</text>
+        </svg>
+      </div>
+      <p class="small" style="margin-top:12px">ONNX入力は正規化済みの<code>float32 NCHW</code>、batch 1固定です。letterbox・ImageNet正規化・sigmoid・thresholdはEdgeアプリ側で同じ条件を再現します。</p>
+    </section>
+
+    <section id="experiments">
+      <h2>6. 実験ロードマップと実装状況</h2>
+      <div class="card timeline">
+        <div class="id">E000</div><div class="item"><strong>2画像overfit</strong> — データ読込、forward/backward、Loss、保存までの配線確認。<span class="status ok">完了</span></div>
+        <div class="id">E001</div><div class="item"><strong>Baseline Student</strong> — MobileNetV3-Small + Lite U-Net、BCE + Dice。<span class="status ok">基盤完成</span></div>
+        <div class="id">E002</div><div class="item"><strong>共通teacher cache / logit KD</strong> — GT由来の参照teacherで蒸留配線を検証。Foundation Model効果とは解釈しない。<span class="status ok">実装済み</span></div>
+        <div class="id">E003</div><div class="item"><strong>SAM 3 text teacher</strong> — prompt、mask、confidence、cache、logit KD。<span class="status ok">コード実装済み</span> <span class="pending">実weight実験待ち</span></div>
+        <div class="id">E004</div><div class="item"><strong>DINOv3 feature KD</strong> — ViT-S/16 dense feature、PCA診断、cosine feature loss。<span class="status ok">コード実装済み</span> <span class="pending">実weight実験待ち</span></div>
+        <div class="id">E005</div><div class="item"><strong>Robustness</strong> — 明るさ、色、contrast、noise、blurと実<code>ood_test</code>。<span class="status ok">実装済み</span></div>
+        <div class="id">E006</div><div class="item"><strong>FP32 ONNX</strong> — export、PyTorch parity、CPU benchmark。<span class="status ok">実変換テスト済み</span></div>
+        <div class="id">E007</div><div class="item"><strong>INT8 PTQ</strong> — static calibration、精度・サイズ・速度比較。<span class="status ok">実変換テスト済み</span></div>
+      </div>
+    </section>
+
+    <section id="status">
+      <h2>7. 「動くコード」と「性能確認済み」を区別する</h2>
+      <div class="grid grid-2">
+        <article class="card">
+          <h3 class="ok">現在、確認できていること</h3>
+          <ul>
+            <li>データ変換・manifest検査・preview</li>
+            <li>Student学習・checkpoint・評価成果物の生成</li>
+            <li>logit / feature distillationの学習経路</li>
+            <li>SAM 3 / DINOv3 adapterとcache形式</li>
+            <li>Robustness評価レポート生成</li>
+            <li>FP32 ONNX変換とPyTorch出力一致</li>
+            <li>INT8 QDQ変換とONNX Runtime CPU推論</li>
+            <li>27件の自動テスト通過</li>
+          </ul>
+        </article>
+        <article class="card">
+          <h3 class="pending">これから実測すること</h3>
+          <ul>
+            <li>DeepCrack full trainingの実スコア</li>
+            <li>SAM 3 teacherが細線を正しく拾うpromptと閾値</li>
+            <li>DINOv3 feature KDのtest / OOD改善量</li>
+            <li>業務画像の未知機器・未知糸種への汎化</li>
+            <li>INT8によるDice低下と実速度改善</li>
+            <li>Raspberry Pi 5でのend-to-end latency・メモリ</li>
+            <li>一本の糸単位の連続性評価（Boundary F1 / clDice等）</li>
+          </ul>
+        </article>
+      </div>
+      <div class="callout" style="margin-top:16px">
+        現時点では「比較可能な実験装置」が完成した段階です。SAM 3やDINOv3を追加しただけでは汎化性能の継承成功とはしません。
+        同一split・seed・Studentで、Baselineより実<code>ood_test</code>が改善したときに初めて効果ありと判断します。
+      </div>
+    </section>
+
+    <section id="run">
+      <h2>8. 最短の実行順序</h2>
+      <ol class="flow-list">
+        <li><strong>DeepCrackを準備しBaselineを学習</strong><pre>python -m fm_to_edge_seg train configs\experiment\e001_deepcrack_baseline.yaml</pre></li>
+        <li><strong>testとRobustnessを評価</strong><pre>python -m fm_to_edge_seg evaluate-robustness ... --split test --device cuda</pre></li>
+        <li><strong>SAM 3 / DINOv3のteacher cacheを別々に作る</strong><pre>python -m fm_to_edge_seg create-sam3-teacher-cache ...
+python -m fm_to_edge_seg create-dinov3-feature-cache ...</pre></li>
+        <li><strong>E003 / E004を学習し、Baselineと同じsplitで比較</strong><pre>python -m fm_to_edge_seg train configs\experiment\e003_sam3_text_logit_kd.yaml
+python -m fm_to_edge_seg train configs\experiment\e004b_dinov3_feature_kd.yaml</pre></li>
+        <li><strong>採用StudentをFP32 ONNX → INT8へ変換</strong><pre>python -m fm_to_edge_seg export-onnx ... student_fp32.onnx
+python -m fm_to_edge_seg quantize-onnx ... student_fp32.onnx student_int8.onnx</pre></li>
+        <li><strong>同じCPU条件で精度・サイズ・速度を比較</strong><pre>python -m fm_to_edge_seg evaluate-onnx ... --split test
+python -m fm_to_edge_seg benchmark-onnx ... --threads 4 --runs 100</pre></li>
+      </ol>
+    </section>
+
+    <section id="files">
+      <h2>9. 詳細ドキュメント</h2>
+      <div class="grid grid-3 file-map">
+        <div class="card"><h3>データとBaseline</h3><a href="deepcrack-setup.md">DeepCrack setup</a><br><a href="training.md">Baseline training</a><br><a href="business-pc-workflow.md">業務PC workflow</a></div>
+        <div class="card"><h3>Foundation Model</h3><a href="foundation-model-access.md">利用申請</a><br><a href="sam3-teacher.md">SAM 3 teacher</a><br><a href="dinov3-feature-distillation.md">DINOv3 feature KD</a></div>
+        <div class="card"><h3>評価とEdge</h3><a href="robustness-evaluation.md">Robustness</a><br><a href="onnx-edge.md">FP32 ONNX</a><br><a href="int8-quantization.md">INT8 PTQ</a></div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <p><strong>fm-to-edge-seg</strong> — Foundation Modelの知識をCPU向け軽量segmentationへ移す研究PoC。</p>
+    <p>データセット、業務画像、teacher cache、checkpoint、ONNXモデルはGit管理対象外です。DeepCrackとFoundation Modelの利用条件は各公式ライセンスを確認してください。</p>
+  </footer>
+</body>
+</html>

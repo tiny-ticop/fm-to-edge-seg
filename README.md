@@ -2,7 +2,9 @@
 
 Foundation Modelのセグメンテーション能力と汎用視覚特徴を、CPU向けの軽量binary segmentationモデルへ蒸留する研究PoCです。
 
-個人開発ではDeepCrackを題材に、細長い領域のセグメンテーション、SAM 3による擬似ラベル、DINOv3によるlogit/feature distillationを検証します。業務環境ではコードだけを再利用し、社内画像・mask・重み・実験結果は個人環境と分離します。
+個人開発ではDeepCrackを題材に、細長い領域のセグメンテーション、SAM 3による擬似ラベル・logit distillation、DINOv3によるfeature distillationを検証します。業務環境ではコードだけを再利用し、社内画像・mask・重み・実験結果は個人環境と分離します。
+
+図を含む現在の実装状況とモデル小型化フローは [HTMLプロジェクトガイド](docs/project-status.html) で確認できます。
 
 ## 現在の段階
 
