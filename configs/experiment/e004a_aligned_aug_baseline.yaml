@@ -1,0 +1,24 @@
+experiment_id: e004a_aligned_aug_baseline
+seed: 42
+data: configs/data/deepcrack.yaml
+model: configs/model/mobilenetv3_lite_unet.yaml
+loss: configs/loss/bce_dice.yaml
+distillation: null
+augmentation:
+  enabled: true
+  horizontal_flip_probability: 0.5
+  vertical_flip_probability: 0.5
+  rotate_90_probability: 0.0
+  brightness: 0.1
+  contrast: 0.1
+training:
+  epochs: 50
+  batch_size: 8
+  learning_rate: 0.0003
+  weight_decay: 0.0001
+  num_workers: 2
+  early_stopping_patience: 10
+  freeze_batch_norm: false
+  mixed_precision: true
+  device: auto
+output_dir: artifacts/e004a_aligned_aug_baseline

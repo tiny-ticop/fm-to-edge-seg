@@ -6,6 +6,7 @@ from fm_to_edge_seg.distillation.cache import (
     create_reference_teacher_cache,
     write_teacher_cache,
 )
+from fm_to_edge_seg.distillation.feature_cache import DenseFeatureCache, DenseFeatureSample
 from fm_to_edge_seg.distillation.sam3_adapter import (
     Sam3TextTeacher,
     create_sam3_teacher_cache,
@@ -20,4 +21,6 @@ __all__ = [
     "Sam3TextTeacher",
     "create_sam3_teacher_cache",
     "merge_sam3_instances",
+    "DenseFeatureCache",
+    "DenseFeatureSample",
 ]

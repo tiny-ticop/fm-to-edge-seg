@@ -54,6 +54,8 @@ class DistillationConfig:
     temperature: float
     weight: float
     confidence_threshold: float
+    kind: str = "logit"
+    student_feature: str | None = None
 
 
 @dataclass(frozen=True)
@@ -90,6 +92,8 @@ def load_experiment_config(path: Path) -> ExperimentConfig:
                 temperature=float(distillation_data.get("temperature", 2.0)),
                 weight=float(distillation_data.get("weight", 1.0)),
                 confidence_threshold=float(distillation_data.get("confidence_threshold", 0.0)),
+                kind=str(distillation_data.get("kind", "logit")),
+                student_feature=distillation_data.get("student_feature"),
             )
 
     config = ExperimentConfig(
@@ -158,5 +162,15 @@ def _validate_config(config: ExperimentConfig) -> None:
         raise ValueError("learning_rate must be positive")
     if config.distillation is not None and config.distillation.weight < 0:
         raise ValueError("distillation weight must be non-negative")
+    if config.distillation is not None and config.distillation.kind not in {"logit", "feature"}:
+        raise ValueError("distillation kind must be 'logit' or 'feature'")
+    if config.distillation is not None and config.distillation.kind == "feature":
+        if not config.distillation.student_feature:
+            raise ValueError("feature distillation requires student_feature")
+        if config.augmentation.rotate_90_probability > 0:
+            raise ValueError(
+                "Feature-cache distillation currently requires rotate_90_probability: 0 "
+                "to preserve spatial alignment"
+            )
     if not config.data.manifest.is_file():
         raise FileNotFoundError(f"Dataset manifest does not exist: {config.data.manifest}")

@@ -12,6 +12,7 @@ from torch.utils.data import Dataset
 
 from fm_to_edge_seg.data.manifest import ManifestRecord, load_manifest
 from fm_to_edge_seg.distillation.cache import TeacherCache
+from fm_to_edge_seg.distillation.feature_cache import DenseFeatureCache
 
 JointTransform = Callable[[Image.Image, Image.Image], tuple[Image.Image, Image.Image]]
 
@@ -37,6 +38,7 @@ class BinarySegmentationDataset(Dataset[dict[str, Any]]):
         image_mean: tuple[float, float, float] = (0.485, 0.456, 0.406),
         image_std: tuple[float, float, float] = (0.229, 0.224, 0.225),
         teacher_cache: TeacherCache | None = None,
+        feature_cache: DenseFeatureCache | None = None,
     ) -> None:
         self.records = [
             record
@@ -52,8 +54,16 @@ class BinarySegmentationDataset(Dataset[dict[str, Any]]):
         self.mean = torch.tensor(image_mean, dtype=torch.float32).view(3, 1, 1)
         self.std = torch.tensor(image_std, dtype=torch.float32).view(3, 1, 1)
         self.teacher_cache = teacher_cache
+        self.feature_cache = feature_cache
         if teacher_cache is not None:
             teacher_cache.validate_sample_ids([record.sample_id for record in self.records])
+        if feature_cache is not None:
+            feature_cache.validate_sample_ids([record.sample_id for record in self.records])
+            if feature_cache.input_size != input_size:
+                raise ValueError(
+                    f"Feature cache input_size {feature_cache.input_size} does not match "
+                    f"dataset input_size {input_size}"
+                )
 
     def __len__(self) -> int:
         return len(self.records)
@@ -66,6 +76,7 @@ class BinarySegmentationDataset(Dataset[dict[str, Any]]):
             mask = source_mask.convert("L")
 
         dense_targets: list[Image.Image] | None = None
+        teacher_feature: torch.Tensor | None = None
         if self.teacher_cache is not None:
             teacher = self.teacher_cache.load(record.sample_id)
             if teacher.logits.shape != (image.height, image.width):
@@ -78,10 +89,21 @@ class BinarySegmentationDataset(Dataset[dict[str, Any]]):
                 Image.fromarray(teacher_probability.astype(np.float32), mode="F"),
                 Image.fromarray(teacher.confidence.astype(np.float32), mode="F"),
             ]
+        if self.feature_cache is not None:
+            feature_sample = self.feature_cache.load(record.sample_id)
+            teacher_feature = torch.from_numpy(feature_sample.features.copy())
 
         if self.joint_transform is not None:
-            if dense_targets is None:
+            if dense_targets is None and teacher_feature is None:
                 image, mask = self.joint_transform(image, mask)
+            elif teacher_feature is not None:
+                image, mask, transformed_targets, teacher_feature = self.joint_transform(
+                    image,
+                    mask,
+                    dense_targets,
+                    teacher_feature,
+                )
+                dense_targets = transformed_targets or None
             else:
                 image, mask, dense_targets = self.joint_transform(image, mask, dense_targets)
 
@@ -114,6 +136,8 @@ class BinarySegmentationDataset(Dataset[dict[str, Any]]):
             teacher_confidence = np.asarray(confidence_image, dtype=np.float32).copy()
             sample["teacher_logit"] = torch.from_numpy(teacher_logit).unsqueeze(0)
             sample["teacher_confidence"] = torch.from_numpy(teacher_confidence).unsqueeze(0)
+        if teacher_feature is not None:
+            sample["teacher_feature"] = teacher_feature
         return sample
 
 
@@ -204,4 +228,8 @@ def segmentation_collate(samples: list[dict[str, Any]]) -> dict[str, Any]:
         batch["teacher_confidence"] = torch.stack(
             [sample["teacher_confidence"] for sample in samples]
         )
+    if "teacher_feature" in samples[0]:
+        if not all("teacher_feature" in sample for sample in samples):
+            raise ValueError("Teacher features must be present for every sample in a batch")
+        batch["teacher_feature"] = torch.stack([sample["teacher_feature"] for sample in samples])
     return batch

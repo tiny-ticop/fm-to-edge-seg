@@ -1,0 +1,7 @@
+name: dinov3_vits16_feature
+enabled: true
+kind: feature
+teacher: dinov3_vits16
+cache_root: teacher_cache/dinov3_vits16_544x384
+weight: 0.25
+student_feature: encoder_s16

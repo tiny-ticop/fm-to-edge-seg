@@ -146,6 +146,31 @@ def build_parser() -> argparse.ArgumentParser:
     teacher_evaluation_parser.add_argument("output", type=Path)
     teacher_evaluation_parser.add_argument("--split", default="train")
     teacher_evaluation_parser.add_argument("--confidence-threshold", type=float, default=0.5)
+    dinov3_parser = subparsers.add_parser(
+        "create-dinov3-feature-cache",
+        help="Extract official DINOv3 dense patch features into a reusable cache.",
+    )
+    dinov3_parser.add_argument("manifest", type=Path)
+    dinov3_parser.add_argument("output", type=Path)
+    dinov3_parser.add_argument("--repository", type=Path, required=True)
+    dinov3_parser.add_argument("--weights", type=Path, required=True)
+    dinov3_parser.add_argument("--model-name", default="dinov3_vits16")
+    dinov3_parser.add_argument("--width", type=int, required=True)
+    dinov3_parser.add_argument("--height", type=int, required=True)
+    dinov3_parser.add_argument("--split", default="train")
+    dinov3_parser.add_argument("--device", default="cuda")
+    dinov3_parser.add_argument("--max-samples", type=int, default=None)
+    dinov3_parser.add_argument("--overwrite", action="store_true")
+    feature_preview_parser = subparsers.add_parser(
+        "preview-feature-cache",
+        help="Visualize cached dense features using per-image PCA.",
+    )
+    feature_preview_parser.add_argument("manifest", type=Path)
+    feature_preview_parser.add_argument("cache", type=Path)
+    feature_preview_parser.add_argument("output", type=Path)
+    feature_preview_parser.add_argument("--split", default="train")
+    feature_preview_parser.add_argument("--limit", type=int, default=6)
+    feature_preview_parser.add_argument("--seed", type=int, default=42)
     return parser
 
 
@@ -350,5 +375,45 @@ def main(argv: list[str] | None = None) -> int:
             f"confident_pixels={result.confident_pixel_fraction:.4f}"
         )
         print(f"artifacts: {args.output.resolve()}")
+        return 0
+    if args.command == "create-dinov3-feature-cache":
+        from fm_to_edge_seg.distillation.dinov3_adapter import (
+            DinoV3DenseTeacher,
+            create_dinov3_feature_cache,
+        )
+
+        teacher = DinoV3DenseTeacher(
+            repository=args.repository,
+            weights=args.weights,
+            model_name=args.model_name,
+            device=args.device,
+        )
+        output = create_dinov3_feature_cache(
+            manifest_path=args.manifest,
+            output_root=args.output,
+            teacher=teacher,
+            input_size=(args.width, args.height),
+            split=args.split,
+            max_samples=args.max_samples,
+            overwrite=args.overwrite,
+        )
+        print(f"feature_cache: {output}")
+        print(
+            f"teacher_kind: dinov3_dense_features, model={args.model_name}, "
+            f"input_size={args.width}x{args.height}"
+        )
+        return 0
+    if args.command == "preview-feature-cache":
+        from fm_to_edge_seg.distillation.feature_preview import create_feature_cache_preview
+
+        output = create_feature_cache_preview(
+            manifest_path=args.manifest,
+            cache_root=args.cache,
+            output_path=args.output,
+            split=args.split,
+            limit=args.limit,
+            seed=args.seed,
+        )
+        print(f"feature_preview: {output}")
         return 0
     raise ValueError(f"Unsupported command: {args.command}")

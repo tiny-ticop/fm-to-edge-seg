@@ -68,6 +68,8 @@ Teacher cacheとlogit distillationの考え方・E002の実行方法は [docs/di
 
 SAM 3の導入、少数画像診断、teacher cache生成、E003実行は [docs/sam3-teacher.md](docs/sam3-teacher.md) にあります。
 
+DINOv3 dense feature cache、PCA診断、E004a/E004b比較は [docs/dinov3-feature-distillation.md](docs/dinov3-feature-distillation.md) にあります。
+
 ## GitHubとVS Code
 
 初回公開、別PCへのclone、VS CodeのSource Control操作は [docs/github-vscode-setup.md](docs/github-vscode-setup.md) にまとめています。

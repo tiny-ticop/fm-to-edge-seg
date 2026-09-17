@@ -19,8 +19,14 @@ from torch.utils.data import DataLoader
 from fm_to_edge_seg.data.dataset import BinarySegmentationDataset, segmentation_collate
 from fm_to_edge_seg.data.transforms import BinarySegmentationAugmentation
 from fm_to_edge_seg.distillation import TeacherCache
+from fm_to_edge_seg.distillation.feature_cache import DenseFeatureCache
 from fm_to_edge_seg.evaluation import save_prediction_preview
-from fm_to_edge_seg.losses import BinaryLogitDistillationLoss, BinarySegmentationLoss
+from fm_to_edge_seg.losses import (
+    BinaryLogitDistillationLoss,
+    BinarySegmentationLoss,
+    DenseFeatureDistillationLoss,
+    FeatureProjectionHead,
+)
 from fm_to_edge_seg.metrics import BinaryMetricsAccumulator
 from fm_to_edge_seg.models import MobileNetV3LiteUNet
 from fm_to_edge_seg.training.config import ExperimentConfig
@@ -88,7 +94,12 @@ def train_experiment(
         joint_transform=train_transform,
         teacher_cache=(
             TeacherCache(config.distillation.cache_root)
-            if config.distillation is not None
+            if config.distillation is not None and config.distillation.kind == "logit"
+            else None
+        ),
+        feature_cache=(
+            DenseFeatureCache(config.distillation.cache_root)
+            if config.distillation is not None and config.distillation.kind == "feature"
             else None
         ),
     )
@@ -120,13 +131,31 @@ def train_experiment(
         dice_weight=config.loss.dice_weight,
     )
     distillation_loss_function = None
-    if config.distillation is not None:
+    feature_loss_function = None
+    feature_projector = None
+    student_feature_name = None
+    if config.distillation is not None and config.distillation.kind == "logit":
         distillation_loss_function = BinaryLogitDistillationLoss(
             temperature=config.distillation.temperature,
             confidence_threshold=config.distillation.confidence_threshold,
         )
+    elif config.distillation is not None and config.distillation.kind == "feature":
+        feature_cache = train_dataset.feature_cache
+        if feature_cache is None:
+            raise RuntimeError("Feature distillation requires a feature cache")
+        student_feature_name = config.distillation.student_feature
+        if student_feature_name not in model.feature_channels:
+            raise ValueError(f"Unknown Student feature: {student_feature_name}")
+        feature_projector = FeatureProjectionHead(
+            model.feature_channels[student_feature_name],
+            feature_cache.feature_channels,
+        ).to(device)
+        feature_loss_function = DenseFeatureDistillationLoss()
+    optimized_parameters = list(model.parameters())
+    if feature_projector is not None:
+        optimized_parameters.extend(feature_projector.parameters())
     optimizer = torch.optim.AdamW(
-        model.parameters(),
+        optimized_parameters,
         lr=training.learning_rate,
         weight_decay=training.weight_decay,
     )
@@ -164,6 +193,9 @@ def train_experiment(
             distillation_weight=(
                 config.distillation.weight if config.distillation is not None else 0.0
             ),
+            feature_loss_function=feature_loss_function,
+            feature_projector=feature_projector,
+            student_feature_name=student_feature_name,
         )
         validation_metrics = _run_epoch(
             model=model,
@@ -177,6 +209,9 @@ def train_experiment(
             scaler=None,
             distillation_loss_function=None,
             distillation_weight=0.0,
+            feature_loss_function=None,
+            feature_projector=None,
+            student_feature_name=None,
         )
         scheduler.step()
         epochs_completed = epoch
@@ -203,6 +238,7 @@ def train_experiment(
             epoch,
             validation_metrics,
             config,
+            feature_projector,
         )
         if validation_metrics.dice > best_validation_dice:
             best_validation_dice = validation_metrics.dice
@@ -215,6 +251,7 @@ def train_experiment(
                 epoch,
                 validation_metrics,
                 config,
+                feature_projector,
             )
         else:
             epochs_without_improvement += 1
@@ -259,9 +296,14 @@ def _run_epoch(
     scaler: torch.amp.GradScaler | None,
     distillation_loss_function: BinaryLogitDistillationLoss | None,
     distillation_weight: float,
+    feature_loss_function: DenseFeatureDistillationLoss | None,
+    feature_projector: FeatureProjectionHead | None,
+    student_feature_name: str | None,
 ) -> EpochResult:
     is_training = optimizer is not None
     model.train(is_training)
+    if feature_projector is not None:
+        feature_projector.train(is_training)
     if is_training and freeze_batch_norm:
         _freeze_batch_norm_statistics(model)
     accumulator = BinaryMetricsAccumulator()
@@ -283,7 +325,11 @@ def _run_epoch(
                 dtype=torch.float16,
                 enabled=mixed_precision,
             ):
-                logits = model(images)
+                student_features = None
+                if feature_projector is not None:
+                    logits, student_features = model.forward_with_features(images)
+                else:
+                    logits = model(images)
                 losses = loss_function(logits, masks, valid_masks)
                 distillation_loss = logits.sum() * 0.0
                 if distillation_loss_function is not None:
@@ -294,6 +340,17 @@ def _run_epoch(
                         teacher_logits,
                         valid_masks,
                         confidence,
+                    )
+                elif feature_loss_function is not None and feature_projector is not None:
+                    if student_features is None or student_feature_name is None:
+                        raise RuntimeError("Student features were not produced")
+                    selected_feature = getattr(student_features, student_feature_name)
+                    projected_feature = feature_projector(selected_feature)
+                    teacher_feature = batch["teacher_feature"].to(device, non_blocking=True)
+                    distillation_loss = feature_loss_function(
+                        projected_feature,
+                        teacher_feature,
+                        valid_masks,
                     )
                 combined_loss = losses["total"] + distillation_weight * distillation_loss
             if is_training:
@@ -377,18 +434,19 @@ def _save_checkpoint(
     epoch: int,
     validation_metrics: EpochResult,
     config: ExperimentConfig,
+    feature_projector: FeatureProjectionHead | None,
 ) -> None:
-    torch.save(
-        {
-            "model_state": model.state_dict(),
-            "optimizer_state": optimizer.state_dict(),
-            "epoch": epoch,
-            "validation": asdict(validation_metrics),
-            "experiment_id": config.experiment_id,
-            "input_size": config.data.input_size,
-        },
-        path,
-    )
+    checkpoint = {
+        "model_state": model.state_dict(),
+        "optimizer_state": optimizer.state_dict(),
+        "epoch": epoch,
+        "validation": asdict(validation_metrics),
+        "experiment_id": config.experiment_id,
+        "input_size": config.data.input_size,
+    }
+    if feature_projector is not None:
+        checkpoint["feature_projector_state"] = feature_projector.state_dict()
+    torch.save(checkpoint, path)
 
 
 def _save_validation_preview(

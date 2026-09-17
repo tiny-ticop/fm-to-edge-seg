@@ -38,6 +38,14 @@ class DepthwiseSeparableBlock(nn.Sequential):
 class MobileNetV3LiteUNet(nn.Module):
     """MobileNetV3-Small encoder with a quantization-friendly lightweight decoder."""
 
+    feature_channels = {
+        "encoder_s4": 16,
+        "encoder_s8": 24,
+        "encoder_s16": 48,
+        "encoder_s32": 576,
+        "decoder_s4": 32,
+    }
+
     def __init__(self, pretrained: bool = True) -> None:
         super().__init__()
         weights = MobileNet_V3_Small_Weights.DEFAULT if pretrained else None
