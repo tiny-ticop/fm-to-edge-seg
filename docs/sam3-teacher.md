@@ -40,12 +40,15 @@ pip install -e ".[train]"
 
 ## 2. checkpointへアクセスする
 
-1. 公式READMEのHugging Faceリンクからアクセス申請
-2. 承認後、Hugging Faceのread tokenを作る
-3. SAM 3専用環境で認証する
+申請画面、Hugging Face認証、token管理、エラー時の確認方法は [SAM 3 / DINOv3 利用申請ガイド](foundation-model-access.md) にまとめています。先に同ガイドのSAM 3手順を完了してください。
+
+1. 公式Hugging Faceページからブラウザでアクセス申請
+2. 承認後、SAM 3専用環境で同じHugging Faceアカウントへ認証
+3. `hf auth whoami`で使用中のアカウントを確認
 
 ```powershell
 hf auth login
+hf auth whoami
 ```
 
 tokenをNotebook、config、Gitへ記載しないでください。デフォルトでは公式APIが認証情報を使ってcheckpointを取得します。会社側で承認されたローカルcheckpointを使う場合だけ`--checkpoint`を指定します。

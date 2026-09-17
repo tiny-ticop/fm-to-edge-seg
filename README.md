@@ -70,6 +70,8 @@ SAM 3の導入、少数画像診断、teacher cache生成、E003実行は [docs/
 
 DINOv3 dense feature cache、PCA診断、E004a/E004b比較は [docs/dinov3-feature-distillation.md](docs/dinov3-feature-distillation.md) にあります。
 
+SAM 3 / DINOv3の公式weight利用申請、認証、業務利用前の確認事項は [docs/foundation-model-access.md](docs/foundation-model-access.md) にあります。
+
 ## GitHubとVS Code
 
 初回公開、別PCへのclone、VS CodeのSource Control操作は [docs/github-vscode-setup.md](docs/github-vscode-setup.md) にまとめています。

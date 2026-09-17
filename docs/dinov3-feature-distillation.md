@@ -27,10 +27,11 @@ Studentが小さいため、最も大きい教師が必ず最良とは限りま�
 
 ## 重要な前提
 
-DINOv3の公式weightは利用申請が必要で、承認後にdownload URLが送られます。コードとweightには独自のDINOv3 Licenseが適用されるため、業務利用前に会社側で確認してください。
+DINOv3の公式weightは利用条件への同意とアクセス申請が必要です。Meta公式フォームでは承認後にdownload URL一覧が送られます。また、現在は公式Hugging Faceからモデル単位で申請する経路もあります。本PoCの現行CLIには、Meta公式フォームから取得したPyTorch weightを使います。コードとweightには独自のDINOv3 Licenseが適用されるため、業務利用前に会社側で確認してください。
 
 - [DINOv3公式リポジトリ](https://github.com/facebookresearch/dinov3)
 - [DINOv3 License](https://github.com/facebookresearch/dinov3/blob/main/LICENSE.md)
+- [SAM 3 / DINOv3 利用申請ガイド](foundation-model-access.md)
 
 weight、業務画像、feature cacheはGitHubへ追加しません。
 
@@ -53,7 +54,7 @@ git clone https://github.com/facebookresearch/dinov3.git external\dinov3
 python -m fm_to_edge_seg doctor
 ```
 
-公式サイトから利用申請し、承認後のURLで`dinov3_vits16` weightを社内で許可された場所へ保存します。URLやtokenはGitへ記録しません。
+利用申請ガイドに従ってMeta公式フォームから申請し、承認後のURLで`dinov3_vits16` weightを社内で許可された場所へ保存します。URLやtokenはGitへ記録しません。
 
 例:
 
