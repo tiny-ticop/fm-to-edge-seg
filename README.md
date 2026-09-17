@@ -11,7 +11,7 @@ DeepCrackのデータ準備とPyTorch Datasetを実装し、MobileNetV3-Small + 
 予定している最初の実験は次の通りです。
 
 1. E000: DeepCrack 2画像による学習パイプラインのoverfit test（完了）
-2. E001: DeepCrack + MobileNetV3-Small/Lite U-Net baseline
+2. E001: DeepCrack + MobileNetV3-Small/Lite U-Net baseline（学習基盤完成）
 3. E002: DINOv3 teacherからのsoft-logit distillation
 4. E003: DINOv3 feature distillation
 5. E004: SAM 3による少数ラベル・擬似ラベル実験
@@ -59,6 +59,8 @@ data/
 ```
 
 DeepCrackの取得・変換手順は [docs/deepcrack-setup.md](docs/deepcrack-setup.md) にあります。
+
+Baselineのsmoke testとColab学習は [docs/training.md](docs/training.md) にあります。
 
 ## GitHubとVS Code
 

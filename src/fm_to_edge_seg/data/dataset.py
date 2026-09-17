@@ -131,3 +131,17 @@ def records_for_split(
         for record in load_manifest(manifest_path, data_root=data_root)
         if record.split == split
     ]
+
+
+def segmentation_collate(samples: list[dict[str, Any]]) -> dict[str, Any]:
+    """Stack tensors while preserving per-sample metadata as Python objects."""
+    return {
+        "image": torch.stack([sample["image"] for sample in samples]),
+        "mask": torch.stack([sample["mask"] for sample in samples]),
+        "valid_mask": torch.stack([sample["valid_mask"] for sample in samples]),
+        "sample_id": [sample["sample_id"] for sample in samples],
+        "image_path": [sample["image_path"] for sample in samples],
+        "mask_path": [sample["mask_path"] for sample in samples],
+        "metadata": [sample["metadata"] for sample in samples],
+        "letterbox": [sample["letterbox"] for sample in samples],
+    }

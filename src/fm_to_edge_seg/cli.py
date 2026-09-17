@@ -66,6 +66,21 @@ def build_parser() -> argparse.ArgumentParser:
     overfit_parser.add_argument("--seed", type=int, default=42)
     overfit_parser.add_argument("--pretrained", action="store_true")
     overfit_parser.add_argument("--device", default="cpu")
+    train_parser = subparsers.add_parser(
+        "train",
+        help="Train and validate an experiment defined by YAML configuration.",
+    )
+    train_parser.add_argument("config", type=Path)
+    train_parser.add_argument("--device", default=None)
+    train_parser.add_argument("--epochs", type=int, default=None)
+    train_parser.add_argument("--num-workers", type=int, default=None)
+    train_parser.add_argument("--max-train-batches", type=int, default=None)
+    train_parser.add_argument("--max-validation-batches", type=int, default=None)
+    train_parser.add_argument(
+        "--no-pretrained",
+        action="store_true",
+        help="Disable pretrained encoder weights for pipeline smoke tests.",
+    )
     return parser
 
 
@@ -130,4 +145,24 @@ def main(argv: list[str] | None = None) -> int:
         )
         print(f"artifacts: {result.output_directory}")
         return 0 if result.final_loss < result.initial_loss else 2
+    if args.command == "train":
+        from fm_to_edge_seg.training.config import load_experiment_config
+        from fm_to_edge_seg.training.trainer import train_experiment
+
+        config = load_experiment_config(args.config)
+        result = train_experiment(
+            config,
+            device_override=args.device,
+            epochs_override=args.epochs,
+            num_workers_override=args.num_workers,
+            pretrained_override=False if args.no_pretrained else None,
+            max_train_batches=args.max_train_batches,
+            max_validation_batches=args.max_validation_batches,
+        )
+        print(
+            f"training_complete: best_epoch={result.best_epoch}, "
+            f"best_validation_dice={result.best_validation_dice:.4f}"
+        )
+        print(f"artifacts: {result.output_directory}")
+        return 0
     raise ValueError(f"Unsupported command: {args.command}")
