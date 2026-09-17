@@ -16,6 +16,7 @@ DeepCrackのデータ準備、軽量Baseline、SAM 3 logit KD、DINOv3 feature K
 4. E003: SAM系による少数ラベル・擬似ラベル実験
 5. E004: DINOv3 feature distillation
 6. E005: 合成撮像変化 + 実`ood_test`による汎化・Robustness評価
+7. E006: FP32 ONNX export + CPU benchmark
 
 ## 開発環境
 
@@ -74,6 +75,8 @@ DINOv3 dense feature cache、PCA診断、E004a/E004b比較は [docs/dinov3-featu
 SAM 3 / DINOv3の公式weight利用申請、認証、業務利用前の確認事項は [docs/foundation-model-access.md](docs/foundation-model-access.md) にあります。
 
 明るさ・色味・ノイズ・ぼけと実`ood_test`による汎化評価は [docs/robustness-evaluation.md](docs/robustness-evaluation.md) にあります。
+
+学習済みStudentのONNX変換、PyTorchとの出力一致検査、CPU benchmarkは [docs/onnx-edge.md](docs/onnx-edge.md) にあります。
 
 ## GitHubとVS Code
 

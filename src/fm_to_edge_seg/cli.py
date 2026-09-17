@@ -120,6 +120,25 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Subset of conditions; defaults to the standard suite.",
     )
+    onnx_export_parser = subparsers.add_parser(
+        "export-onnx",
+        help="Export a Student checkpoint to ONNX and verify numerical parity.",
+    )
+    onnx_export_parser.add_argument("config", type=Path)
+    onnx_export_parser.add_argument("checkpoint", type=Path)
+    onnx_export_parser.add_argument("output", type=Path)
+    onnx_export_parser.add_argument("--opset", type=int, default=17)
+    onnx_export_parser.add_argument("--max-absolute-error", type=float, default=1e-4)
+    onnx_benchmark_parser = subparsers.add_parser(
+        "benchmark-onnx",
+        help="Benchmark an ONNX Student model with ONNX Runtime on CPU.",
+    )
+    onnx_benchmark_parser.add_argument("model", type=Path)
+    onnx_benchmark_parser.add_argument("output", type=Path)
+    onnx_benchmark_parser.add_argument("--warmup-runs", type=int, default=10)
+    onnx_benchmark_parser.add_argument("--runs", type=int, default=100)
+    onnx_benchmark_parser.add_argument("--threads", type=int, default=1)
+    onnx_benchmark_parser.add_argument("--seed", type=int, default=42)
     cache_parser = subparsers.add_parser(
         "create-reference-teacher-cache",
         help="Create a label-derived teacher cache to verify the distillation pipeline.",
@@ -346,6 +365,43 @@ def main(argv: list[str] | None = None) -> int:
             f"worst={result.worst_condition}:{result.worst_dice:.4f}"
         )
         print(f"artifacts: {args.output.resolve()}")
+        return 0
+    if args.command == "export-onnx":
+        from fm_to_edge_seg.deployment import export_student_onnx
+        from fm_to_edge_seg.training.config import load_experiment_config
+
+        config = load_experiment_config(args.config)
+        result = export_student_onnx(
+            config=config,
+            checkpoint_path=args.checkpoint,
+            output_path=args.output,
+            opset=args.opset,
+            max_allowed_error=args.max_absolute_error,
+        )
+        print(
+            f"onnx_export_complete: size={result.model_size_megabytes:.2f} MiB, "
+            f"parameters={result.parameters}, max_error={result.max_absolute_error:.8f}"
+        )
+        print(f"model: {result.model_path}")
+        print(f"metadata: {result.metadata_path}")
+        return 0
+    if args.command == "benchmark-onnx":
+        from fm_to_edge_seg.deployment import benchmark_onnx
+
+        result = benchmark_onnx(
+            model_path=args.model,
+            output_path=args.output,
+            warmup_runs=args.warmup_runs,
+            measured_runs=args.runs,
+            intra_op_threads=args.threads,
+            seed=args.seed,
+        )
+        print(
+            f"onnx_benchmark_complete: mean={result.mean_milliseconds:.2f} ms, "
+            f"p95={result.p95_milliseconds:.2f} ms, fps={result.frames_per_second:.2f}, "
+            f"threads={result.intra_op_threads}"
+        )
+        print(f"report: {args.output.resolve()}")
         return 0
     if args.command == "create-reference-teacher-cache":
         from fm_to_edge_seg.distillation import create_reference_teacher_cache
