@@ -112,6 +112,40 @@ def build_parser() -> argparse.ArgumentParser:
     cache_parser.add_argument("--split", default="train")
     cache_parser.add_argument("--foreground-probability", type=float, default=0.99)
     cache_parser.add_argument("--overwrite", action="store_true")
+    sam3_parser = subparsers.add_parser(
+        "create-sam3-teacher-cache",
+        help="Run official SAM 3 with a text prompt and create a teacher cache.",
+    )
+    sam3_parser.add_argument("manifest", type=Path)
+    sam3_parser.add_argument("output", type=Path)
+    sam3_parser.add_argument("--prompt", required=True)
+    sam3_parser.add_argument("--split", default="train")
+    sam3_parser.add_argument("--device", default="cuda")
+    sam3_parser.add_argument("--score-threshold", type=float, default=0.5)
+    sam3_parser.add_argument("--foreground-probability", type=float, default=0.99)
+    sam3_parser.add_argument("--background-confidence", type=float, default=0.25)
+    sam3_parser.add_argument("--checkpoint", type=Path, default=None)
+    sam3_parser.add_argument("--max-samples", type=int, default=None)
+    sam3_parser.add_argument("--overwrite", action="store_true")
+    teacher_preview_parser = subparsers.add_parser(
+        "preview-teacher-cache",
+        help="Compare ground truth, cached teacher masks, and confidence.",
+    )
+    teacher_preview_parser.add_argument("manifest", type=Path)
+    teacher_preview_parser.add_argument("cache", type=Path)
+    teacher_preview_parser.add_argument("output", type=Path)
+    teacher_preview_parser.add_argument("--split", default="train")
+    teacher_preview_parser.add_argument("--limit", type=int, default=8)
+    teacher_preview_parser.add_argument("--seed", type=int, default=42)
+    teacher_evaluation_parser = subparsers.add_parser(
+        "evaluate-teacher-cache",
+        help="Evaluate cached teacher masks against ground truth.",
+    )
+    teacher_evaluation_parser.add_argument("manifest", type=Path)
+    teacher_evaluation_parser.add_argument("cache", type=Path)
+    teacher_evaluation_parser.add_argument("output", type=Path)
+    teacher_evaluation_parser.add_argument("--split", default="train")
+    teacher_evaluation_parser.add_argument("--confidence-threshold", type=float, default=0.5)
     return parser
 
 
@@ -261,5 +295,60 @@ def main(argv: list[str] | None = None) -> int:
         )
         print(f"teacher_cache: {output}")
         print("teacher_kind: reference_ground_truth_mask (pipeline verification only)")
+        return 0
+    if args.command == "create-sam3-teacher-cache":
+        from fm_to_edge_seg.distillation.sam3_adapter import (
+            Sam3TextTeacher,
+            create_sam3_teacher_cache,
+        )
+
+        teacher = Sam3TextTeacher(
+            prompt=args.prompt,
+            device=args.device,
+            score_threshold=args.score_threshold,
+            foreground_probability=args.foreground_probability,
+            background_confidence=args.background_confidence,
+            checkpoint_path=args.checkpoint,
+        )
+        output = create_sam3_teacher_cache(
+            manifest_path=args.manifest,
+            output_root=args.output,
+            teacher=teacher,
+            split=args.split,
+            max_samples=args.max_samples,
+            overwrite=args.overwrite,
+        )
+        print(f"teacher_cache: {output}")
+        print(f"teacher_kind: sam3_text_prompt, prompt={args.prompt!r}")
+        return 0
+    if args.command == "preview-teacher-cache":
+        from fm_to_edge_seg.distillation.preview import create_teacher_cache_preview
+
+        output = create_teacher_cache_preview(
+            manifest_path=args.manifest,
+            cache_root=args.cache,
+            output_path=args.output,
+            split=args.split,
+            limit=args.limit,
+            seed=args.seed,
+        )
+        print(f"teacher_preview: {output}")
+        return 0
+    if args.command == "evaluate-teacher-cache":
+        from fm_to_edge_seg.distillation.evaluation import evaluate_teacher_cache
+
+        result = evaluate_teacher_cache(
+            manifest_path=args.manifest,
+            cache_root=args.cache,
+            output_directory=args.output,
+            split=args.split,
+            confidence_threshold=args.confidence_threshold,
+        )
+        print(
+            f"teacher_evaluation: samples={result.evaluated_samples}/{result.manifest_samples}, "
+            f"dice={result.dice:.4f}, iou={result.iou:.4f}, "
+            f"confident_pixels={result.confident_pixel_fraction:.4f}"
+        )
+        print(f"artifacts: {args.output.resolve()}")
         return 0
     raise ValueError(f"Unsupported command: {args.command}")

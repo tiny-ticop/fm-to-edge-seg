@@ -1,0 +1,9 @@
+name: sam3_text_crack
+enabled: true
+teacher: sam3_text_prompt
+cache_root: teacher_cache/sam3_text_crack
+temperature: 2.0
+weight: 0.5
+# Background confidence defaults to 0.25 during cache creation, so 0.5
+# transfers confident foreground while supervised labels still teach background.
+confidence_threshold: 0.5

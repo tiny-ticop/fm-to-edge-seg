@@ -66,6 +66,8 @@ RTX搭載の業務PCで画像準備から学習・評価まで行う手順は [d
 
 Teacher cacheとlogit distillationの考え方・E002の実行方法は [docs/distillation.md](docs/distillation.md) にあります。
 
+SAM 3の導入、少数画像診断、teacher cache生成、E003実行は [docs/sam3-teacher.md](docs/sam3-teacher.md) にあります。
+
 ## GitHubとVS Code
 
 初回公開、別PCへのclone、VS CodeのSource Control操作は [docs/github-vscode-setup.md](docs/github-vscode-setup.md) にまとめています。
