@@ -1,0 +1,8 @@
+experiment_id: e001_deepcrack_baseline
+seed: 42
+data: configs/data/deepcrack.yaml
+model: configs/model/mobilenetv3_lite_unet.yaml
+loss: configs/loss/bce_dice.yaml
+distillation: null
+output_dir: artifacts/e001_deepcrack_baseline
+

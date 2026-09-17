@@ -1,0 +1,50 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Editors and operating systems
+.idea/
+.DS_Store
+Thumbs.db
+
+# Local secrets and environment files
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Datasets and company-local configuration
+data/*
+!data/README.md
+configs/data/local_*.yaml
+configs/data/company_*.yaml
+manifests/
+
+# Model artifacts and experiment outputs
+artifacts/
+checkpoints/
+teacher_cache/
+runs/
+wandb/
+mlruns/
+*.ckpt
+*.pth
+*.pt
+*.onnx
+*.safetensors
+
+# Notebook outputs/checkpoints
+.ipynb_checkpoints/
+

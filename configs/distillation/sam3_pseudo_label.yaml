@@ -1,0 +1,8 @@
+name: sam3_pseudo_label
+enabled: true
+teacher: sam3
+cache_root: teacher_cache/sam3
+prompt_mode: text_and_exemplar
+text_prompt: crack
+confidence_threshold: 0.5
+

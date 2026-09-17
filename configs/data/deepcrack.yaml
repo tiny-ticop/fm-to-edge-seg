@@ -1,0 +1,13 @@
+name: deepcrack
+task: binary_segmentation
+manifest: data/deepcrack/manifest.csv
+image_mode: RGB
+mask_values:
+  background: 0
+  foreground: 1
+  ignore: 255
+input:
+  width: 544
+  height: 384
+  preserve_aspect_ratio: true
+

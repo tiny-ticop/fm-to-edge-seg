@@ -1,0 +1,16 @@
+{
+  "editor.formatOnSave": true,
+  "python.testing.pytestEnabled": true,
+  "python.testing.unittestEnabled": false,
+  "python.testing.pytestArgs": [
+    "tests"
+  ],
+  "ruff.nativeServer": "on",
+  "search.exclude": {
+    "**/artifacts": true,
+    "**/checkpoints": true,
+    "**/data": true,
+    "**/teacher_cache": true
+  }
+}
+

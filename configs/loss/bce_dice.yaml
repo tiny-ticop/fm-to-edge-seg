@@ -1,0 +1,5 @@
+name: bce_dice
+bce_weight: 1.0
+dice_weight: 1.0
+ignore_index: 255
+
