@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 
 from fm_to_edge_seg import __version__
+from fm_to_edge_seg.data.binary_dataset import prepare_binary_dataset
 from fm_to_edge_seg.data.deepcrack import prepare_deepcrack
 from fm_to_edge_seg.data.manifest import validate_manifest
 from fm_to_edge_seg.data.preview import create_dataset_preview
@@ -17,7 +18,7 @@ def build_parser() -> argparse.ArgumentParser:
         description="Foundation-model to edge segmentation research utilities.",
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
-    subparsers.add_parser("doctor", help="Print the active environment.")
+    subparsers.add_parser("doctor", help="Print Python, PyTorch, and GPU diagnostics.")
     validate_parser = subparsers.add_parser(
         "validate-manifest",
         help="Validate image/mask pairs described by a dataset manifest.",
@@ -42,6 +43,17 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Allow replacing files previously generated in the output directory.",
     )
+    binary_parser = subparsers.add_parser(
+        "prepare-binary-dataset",
+        help="Prepare matching images/ and masks/ folders as a canonical dataset.",
+    )
+    binary_parser.add_argument("source", type=Path)
+    binary_parser.add_argument("output", type=Path)
+    binary_parser.add_argument("--val-fraction", type=float, default=0.2)
+    binary_parser.add_argument("--test-fraction", type=float, default=0.0)
+    binary_parser.add_argument("--seed", type=int, default=42)
+    binary_parser.add_argument("--metadata", type=Path, default=None)
+    binary_parser.add_argument("--overwrite", action="store_true")
     preview_parser = subparsers.add_parser(
         "preview-dataset",
         help="Create a contact sheet of images, masks, and overlays.",
@@ -81,6 +93,16 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Disable pretrained encoder weights for pipeline smoke tests.",
     )
+    evaluate_parser = subparsers.add_parser(
+        "evaluate",
+        help="Evaluate a trained checkpoint on a manifest split.",
+    )
+    evaluate_parser.add_argument("config", type=Path)
+    evaluate_parser.add_argument("checkpoint", type=Path)
+    evaluate_parser.add_argument("output", type=Path)
+    evaluate_parser.add_argument("--split", default="test")
+    evaluate_parser.add_argument("--device", default="auto")
+    evaluate_parser.add_argument("--num-workers", type=int, default=0)
     return parser
 
 
@@ -89,6 +111,23 @@ def run_doctor() -> int:
     print(f"python: {platform.python_version()}")
     print(f"platform: {platform.platform()}")
     print(f"executable: {sys.executable}")
+    try:
+        import torch
+        import torchvision
+
+        print(f"torch: {torch.__version__}")
+        print(f"torchvision: {torchvision.__version__}")
+        print(f"cuda_available: {torch.cuda.is_available()}")
+        print(f"torch_cuda_runtime: {torch.version.cuda}")
+        if torch.cuda.is_available():
+            for index in range(torch.cuda.device_count()):
+                properties = torch.cuda.get_device_properties(index)
+                memory_gib = properties.total_memory / (1024**3)
+                print(f"gpu[{index}]: {properties.name} ({memory_gib:.1f} GiB)")
+        else:
+            print("gpu: not available (CPU training remains available)")
+    except ImportError as error:
+        print(f"pytorch: not installed ({error})")
     return 0
 
 
@@ -106,6 +145,22 @@ def main(argv: list[str] | None = None) -> int:
             output_root=args.output,
             val_fraction=args.val_fraction,
             seed=args.seed,
+            overwrite=args.overwrite,
+        )
+        print(f"manifest: {result.manifest_path}")
+        print(
+            "samples: "
+            + ", ".join(f"{split}={count}" for split, count in sorted(result.split_counts.items()))
+        )
+        return 0
+    if args.command == "prepare-binary-dataset":
+        result = prepare_binary_dataset(
+            source_root=args.source,
+            output_root=args.output,
+            val_fraction=args.val_fraction,
+            test_fraction=args.test_fraction,
+            seed=args.seed,
+            metadata_path=args.metadata,
             overwrite=args.overwrite,
         )
         print(f"manifest: {result.manifest_path}")
@@ -164,5 +219,25 @@ def main(argv: list[str] | None = None) -> int:
             f"best_validation_dice={result.best_validation_dice:.4f}"
         )
         print(f"artifacts: {result.output_directory}")
+        return 0
+    if args.command == "evaluate":
+        from fm_to_edge_seg.evaluation.evaluator import evaluate_checkpoint
+        from fm_to_edge_seg.training.config import load_experiment_config
+
+        config = load_experiment_config(args.config)
+        result = evaluate_checkpoint(
+            config=config,
+            checkpoint_path=args.checkpoint,
+            output_directory=args.output,
+            split=args.split,
+            device_name=args.device,
+            num_workers=args.num_workers,
+        )
+        print(
+            f"evaluation_complete: split={result.split}, samples={result.samples}, "
+            f"dice={result.dice:.4f}, iou={result.iou:.4f}, "
+            f"milliseconds_per_image={result.milliseconds_per_image:.2f}"
+        )
+        print(f"artifacts: {args.output.resolve()}")
         return 0
     raise ValueError(f"Unsupported command: {args.command}")

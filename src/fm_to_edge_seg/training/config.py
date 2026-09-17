@@ -44,6 +44,7 @@ class TrainingConfig:
     early_stopping_patience: int
     freeze_batch_norm: bool
     device: str
+    mixed_precision: bool = True
 
 
 @dataclass(frozen=True)
@@ -100,6 +101,7 @@ def load_experiment_config(path: Path) -> ExperimentConfig:
             early_stopping_patience=int(training.get("early_stopping_patience", 10)),
             freeze_batch_norm=bool(training.get("freeze_batch_norm", False)),
             device=str(training.get("device", "auto")),
+            mixed_precision=bool(training.get("mixed_precision", True)),
         ),
         source_path=path,
     )

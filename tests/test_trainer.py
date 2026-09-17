@@ -7,6 +7,7 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
+from fm_to_edge_seg.evaluation.evaluator import evaluate_checkpoint
 from fm_to_edge_seg.training.config import (
     AugmentationConfig,
     DataConfig,
@@ -59,6 +60,18 @@ def test_training_smoke_creates_reproducibility_artifacts() -> None:
         assert (output / "history.jsonl").is_file()
         assert (output / "summary.json").is_file()
         assert (output / "validation_predictions.png").is_file()
+
+        evaluation_output = root / "evaluation"
+        evaluation = evaluate_checkpoint(
+            config,
+            output / "best.pt",
+            evaluation_output,
+            split="val",
+            device_name="cpu",
+        )
+        assert evaluation.samples == 1
+        assert (evaluation_output / "metrics.json").is_file()
+        assert (evaluation_output / "predictions.png").is_file()
 
 
 def _write_dataset(root: Path) -> Path:

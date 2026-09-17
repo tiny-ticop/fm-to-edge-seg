@@ -1,0 +1,14 @@
+name: business_yarn
+task: binary_segmentation
+# Copy this file to configs/data/local_business.yaml and replace the path.
+# Forward slashes are recommended even on Windows.
+manifest: D:/fm-to-edge-seg-data/prepared/manifest.csv
+image_mode: RGB
+mask_values:
+  background: 0
+  foreground: 1
+  ignore: 255
+input:
+  width: 768
+  height: 512
+  preserve_aspect_ratio: true

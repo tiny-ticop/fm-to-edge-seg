@@ -62,6 +62,8 @@ DeepCrackの取得・変換手順は [docs/deepcrack-setup.md](docs/deepcrack-se
 
 Baselineのsmoke testとColab学習は [docs/training.md](docs/training.md) にあります。
 
+RTX搭載の業務PCで画像準備から学習・評価まで行う手順は [docs/business-pc-workflow.md](docs/business-pc-workflow.md) にあります。
+
 ## GitHubとVS Code
 
 初回公開、別PCへのclone、VS CodeのSource Control操作は [docs/github-vscode-setup.md](docs/github-vscode-setup.md) にまとめています。

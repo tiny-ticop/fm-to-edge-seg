@@ -120,6 +120,12 @@ def train_experiment(
         optimizer,
         T_max=max(1, training.epochs),
     )
+    amp_enabled = training.mixed_precision and device.type == "cuda"
+    scaler = torch.amp.GradScaler("cuda", enabled=amp_enabled)
+    print(
+        f"runtime: device={device}, mixed_precision={amp_enabled}, "
+        f"train_samples={len(train_dataset)}, val_samples={len(validation_dataset)}"
+    )
 
     best_validation_dice = -1.0
     best_epoch = 0
@@ -138,6 +144,8 @@ def train_experiment(
             optimizer=optimizer,
             freeze_batch_norm=training.freeze_batch_norm,
             max_batches=max_train_batches,
+            mixed_precision=amp_enabled,
+            scaler=scaler,
         )
         validation_metrics = _run_epoch(
             model=model,
@@ -147,6 +155,8 @@ def train_experiment(
             optimizer=None,
             freeze_batch_norm=False,
             max_batches=max_validation_batches,
+            mixed_precision=amp_enabled,
+            scaler=None,
         )
         scheduler.step()
         epochs_completed = epoch
@@ -224,6 +234,8 @@ def _run_epoch(
     optimizer: torch.optim.Optimizer | None,
     freeze_batch_norm: bool,
     max_batches: int | None,
+    mixed_precision: bool,
+    scaler: torch.amp.GradScaler | None,
 ) -> EpochResult:
     is_training = optimizer is not None
     model.train(is_training)
@@ -243,11 +255,21 @@ def _run_epoch(
             valid_masks = batch["valid_mask"].to(device, non_blocking=True)
             if is_training:
                 optimizer.zero_grad(set_to_none=True)
-            logits = model(images)
-            losses = loss_function(logits, masks, valid_masks)
+            with torch.autocast(
+                device_type=device.type,
+                dtype=torch.float16,
+                enabled=mixed_precision,
+            ):
+                logits = model(images)
+                losses = loss_function(logits, masks, valid_masks)
             if is_training:
-                losses["total"].backward()
-                optimizer.step()
+                if scaler is not None and scaler.is_enabled():
+                    scaler.scale(losses["total"]).backward()
+                    scaler.step(optimizer)
+                    scaler.update()
+                else:
+                    losses["total"].backward()
+                    optimizer.step()
 
             batch_size = images.shape[0]
             sample_count += batch_size

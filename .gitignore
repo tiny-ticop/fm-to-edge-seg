@@ -31,6 +31,8 @@ data/*
 external/
 configs/data/local_*.yaml
 configs/data/company_*.yaml
+configs/experiment/local_*.yaml
+configs/experiment/company_*.yaml
 manifests/
 
 # Model artifacts and experiment outputs

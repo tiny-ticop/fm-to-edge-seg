@@ -19,5 +19,6 @@ training:
   num_workers: 2
   early_stopping_patience: 10
   freeze_batch_norm: false
+  mixed_precision: true
   device: auto
 output_dir: artifacts/e001_deepcrack_baseline

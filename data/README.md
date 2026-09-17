@@ -41,3 +41,5 @@ python -m fm_to_edge_seg preview-dataset `
 ```
 
 DeepCrackは配布元の利用条件に従い、データ本体をこのリポジトリへ再配布しません。業務画像、派生mask、teacher cache、checkpointも個人GitHubへ追加しません。
+
+業務画像を同じ形式へ変換する手順は [業務PCワークフロー](../docs/business-pc-workflow.md) を参照してください。
