@@ -28,6 +28,7 @@ Thumbs.db
 # Datasets and company-local configuration
 data/*
 !data/README.md
+external/
 configs/data/local_*.yaml
 configs/data/company_*.yaml
 manifests/

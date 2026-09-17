@@ -55,6 +55,8 @@ data/
     └── manifest.csv
 ```
 
+DeepCrackの取得・変換手順は [docs/deepcrack-setup.md](docs/deepcrack-setup.md) にあります。
+
 ## GitHubとVS Code
 
 初回公開、別PCへのclone、VS CodeのSource Control操作は [docs/github-vscode-setup.md](docs/github-vscode-setup.md) にまとめています。
