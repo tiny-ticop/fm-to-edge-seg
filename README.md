@@ -6,7 +6,7 @@ Foundation Modelのセグメンテーション能力と汎用視覚特徴を、C
 
 ## 現在の段階
 
-DeepCrackのデータ準備とPyTorch Datasetを実装し、MobileNetV3-Small + Lite U-Netが少数画像へoverfitできるところまで確認済みです。
+DeepCrackのデータ準備、軽量Baseline、SAM 3 logit KD、DINOv3 feature KD、撮像変化に対するRobustness評価まで実装済みです。実データ上の優劣は、各環境で同じsplitとseedを使って実験して判断します。
 
 予定している最初の実験は次の通りです。
 
@@ -15,6 +15,7 @@ DeepCrackのデータ準備とPyTorch Datasetを実装し、MobileNetV3-Small + 
 3. E002: 共通teacher cache + soft-logit distillation（配線基盤）
 4. E003: SAM系による少数ラベル・擬似ラベル実験
 5. E004: DINOv3 feature distillation
+6. E005: 合成撮像変化 + 実`ood_test`による汎化・Robustness評価
 
 ## 開発環境
 
@@ -71,6 +72,8 @@ SAM 3の導入、少数画像診断、teacher cache生成、E003実行は [docs/
 DINOv3 dense feature cache、PCA診断、E004a/E004b比較は [docs/dinov3-feature-distillation.md](docs/dinov3-feature-distillation.md) にあります。
 
 SAM 3 / DINOv3の公式weight利用申請、認証、業務利用前の確認事項は [docs/foundation-model-access.md](docs/foundation-model-access.md) にあります。
+
+明るさ・色味・ノイズ・ぼけと実`ood_test`による汎化評価は [docs/robustness-evaluation.md](docs/robustness-evaluation.md) にあります。
 
 ## GitHubとVS Code
 

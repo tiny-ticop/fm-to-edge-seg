@@ -103,6 +103,23 @@ def build_parser() -> argparse.ArgumentParser:
     evaluate_parser.add_argument("--split", default="test")
     evaluate_parser.add_argument("--device", default="auto")
     evaluate_parser.add_argument("--num-workers", type=int, default=0)
+    robustness_parser = subparsers.add_parser(
+        "evaluate-robustness",
+        help="Evaluate a checkpoint under deterministic image corruptions.",
+    )
+    robustness_parser.add_argument("config", type=Path)
+    robustness_parser.add_argument("checkpoint", type=Path)
+    robustness_parser.add_argument("output", type=Path)
+    robustness_parser.add_argument("--split", default="test")
+    robustness_parser.add_argument("--device", default="auto")
+    robustness_parser.add_argument("--num-workers", type=int, default=0)
+    robustness_parser.add_argument("--max-samples", type=int, default=None)
+    robustness_parser.add_argument(
+        "--conditions",
+        nargs="+",
+        default=None,
+        help="Subset of conditions; defaults to the standard suite.",
+    )
     cache_parser = subparsers.add_parser(
         "create-reference-teacher-cache",
         help="Create a label-derived teacher cache to verify the distillation pipeline.",
@@ -305,6 +322,28 @@ def main(argv: list[str] | None = None) -> int:
             f"evaluation_complete: split={result.split}, samples={result.samples}, "
             f"dice={result.dice:.4f}, iou={result.iou:.4f}, "
             f"milliseconds_per_image={result.milliseconds_per_image:.2f}"
+        )
+        print(f"artifacts: {args.output.resolve()}")
+        return 0
+    if args.command == "evaluate-robustness":
+        from fm_to_edge_seg.evaluation.robustness import evaluate_robustness
+        from fm_to_edge_seg.training.config import load_experiment_config
+
+        config = load_experiment_config(args.config)
+        result = evaluate_robustness(
+            config=config,
+            checkpoint_path=args.checkpoint,
+            output_directory=args.output,
+            split=args.split,
+            device_name=args.device,
+            num_workers=args.num_workers,
+            condition_names=args.conditions,
+            max_samples=args.max_samples,
+        )
+        print(
+            f"robustness_complete: split={result.split}, clean_dice={result.clean_dice:.4f}, "
+            f"mean_corrupted_dice={result.mean_corrupted_dice:.4f}, "
+            f"worst={result.worst_condition}:{result.worst_dice:.4f}"
         )
         print(f"artifacts: {args.output.resolve()}")
         return 0

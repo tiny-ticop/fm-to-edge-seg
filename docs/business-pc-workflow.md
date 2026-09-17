@@ -157,6 +157,8 @@ testがまだない場合は`--split val`にします。出力は次の通りで
 
 処理時間には画像読み込みと前処理も含まれるため、最終的なRaspberry Pi速度とは分けて扱います。現段階の成功は、Diceだけでなく、別groupの細い糸が途切れていないこと、機械部品を糸と誤検出していないことです。
 
+同じcheckpointへ明るさ・色味・ノイズ・ぼけを加えたときの劣化と、実際の`ood_test`を評価する方法は [E005: 汎化・Robustness評価](robustness-evaluation.md) を参照してください。
+
 ## 8. 実験を残す
 
 コードと汎用configだけをcommitし、業務データはcommitしません。
