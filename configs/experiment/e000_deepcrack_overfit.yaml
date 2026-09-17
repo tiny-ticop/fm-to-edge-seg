@@ -1,0 +1,14 @@
+experiment_id: e000_deepcrack_overfit
+seed: 42
+data: configs/data/deepcrack.yaml
+model: configs/model/mobilenetv3_lite_unet.yaml
+loss: configs/loss/bce_dice.yaml
+input:
+  width: 272
+  height: 192
+samples: 2
+steps: 60
+learning_rate: 0.003
+pretrained: false
+device: cpu
+output_dir: artifacts/e000_overfit

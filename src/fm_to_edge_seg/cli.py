@@ -51,6 +51,21 @@ def build_parser() -> argparse.ArgumentParser:
     preview_parser.add_argument("--split", default="train")
     preview_parser.add_argument("--limit", type=int, default=8)
     preview_parser.add_argument("--seed", type=int, default=42)
+    overfit_parser = subparsers.add_parser(
+        "overfit-batch",
+        help="Overfit a few samples to verify the complete training path.",
+    )
+    overfit_parser.add_argument("manifest", type=Path)
+    overfit_parser.add_argument("output", type=Path)
+    overfit_parser.add_argument("--split", default="train")
+    overfit_parser.add_argument("--width", type=int, default=272)
+    overfit_parser.add_argument("--height", type=int, default=192)
+    overfit_parser.add_argument("--samples", type=int, default=2)
+    overfit_parser.add_argument("--steps", type=int, default=30)
+    overfit_parser.add_argument("--learning-rate", type=float, default=3e-3)
+    overfit_parser.add_argument("--seed", type=int, default=42)
+    overfit_parser.add_argument("--pretrained", action="store_true")
+    overfit_parser.add_argument("--device", default="cpu")
     return parser
 
 
@@ -94,4 +109,25 @@ def main(argv: list[str] | None = None) -> int:
         )
         print(f"preview: {result}")
         return 0
+    if args.command == "overfit-batch":
+        from fm_to_edge_seg.training.overfit import run_overfit_experiment
+
+        result = run_overfit_experiment(
+            manifest_path=args.manifest,
+            output_directory=args.output,
+            split=args.split,
+            input_size=(args.width, args.height),
+            sample_count=args.samples,
+            steps=args.steps,
+            learning_rate=args.learning_rate,
+            seed=args.seed,
+            pretrained=args.pretrained,
+            device_name=args.device,
+        )
+        print(
+            f"overfit: loss {result.initial_loss:.6f} -> {result.final_loss:.6f}, "
+            f"dice {result.initial_dice:.4f} -> {result.final_dice:.4f}"
+        )
+        print(f"artifacts: {result.output_directory}")
+        return 0 if result.final_loss < result.initial_loss else 2
     raise ValueError(f"Unsupported command: {args.command}")

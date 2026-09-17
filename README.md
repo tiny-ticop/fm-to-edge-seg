@@ -6,11 +6,11 @@ Foundation Modelのセグメンテーション能力と汎用視覚特徴を、C
 
 ## 現在の段階
 
-プロジェクト基盤を構築した段階です。学習コードやモデル実装はまだ含まれていません。
+DeepCrackのデータ準備とPyTorch Datasetを実装し、MobileNetV3-Small + Lite U-Netが少数画像へoverfitできるところまで確認済みです。
 
 予定している最初の実験は次の通りです。
 
-1. E000: synthetic dataによる学習パイプラインのsmoke test
+1. E000: DeepCrack 2画像による学習パイプラインのoverfit test（完了）
 2. E001: DeepCrack + MobileNetV3-Small/Lite U-Net baseline
 3. E002: DINOv3 teacherからのsoft-logit distillation
 4. E003: DINOv3 feature distillation
